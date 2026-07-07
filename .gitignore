@@ -7,3 +7,7 @@ dist/
 coverage/
 npm-debug.log*
 worker/.cache/
+CLAUDE.md
+agent.md
+.github
+
