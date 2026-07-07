@@ -3,8 +3,8 @@ import mongoose from 'mongoose';
 import { Worker } from 'bullmq';
 import { createClient } from 'redis';
 import { Submission } from './models/Submission.js';
-import { runInSandbox } from './sandbox.js';
-import { HARDCODED_TEST_CASE } from './testcase.js';
+import { Problem } from './models/Problem.js';
+import { judge } from './judge.js';
 
 dotenv.config();
 
@@ -30,13 +30,16 @@ const worker = new Worker<SubmissionJobData>(
     submission.status = 'running';
     await submission.save();
 
-    const result = await runInSandbox(
-      submission.code,
-      HARDCODED_TEST_CASE.input,
-      HARDCODED_TEST_CASE.expectedOutput,
-    );
+    const problem = await Problem.findById(submission.problemId);
+    if (!problem) {
+      throw new Error(`problem ${submission.problemId} not found`);
+    }
+
+    const result = await judge(submission.code, problem);
 
     submission.status = result.verdict;
+    submission.failedTestIndex = result.failedTestIndex;
+    submission.execTimeMs = result.execTimeMs;
     submission.output = result.output;
     submission.compileError = result.compileError;
     await submission.save();

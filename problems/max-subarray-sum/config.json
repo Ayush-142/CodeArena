@@ -1,0 +1,7 @@
+{
+  "title": "Maximum Subarray Sum",
+  "difficulty": "medium",
+  "tags": ["arrays", "dp", "kadane"],
+  "timeLimitMs": 2000,
+  "memoryLimitMb": 256
+}

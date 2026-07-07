@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { createClient } from 'redis';
 import { submissionsRouter } from './routes/submissions.js';
+import { problemsRouter } from './routes/problems.js';
 
 dotenv.config();
 
@@ -11,6 +12,7 @@ await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codea
 const app = express();
 app.use(express.json());
 
+app.use('/api/problems', problemsRouter);
 app.use('/api/submissions', submissionsRouter);
 
 app.get('/health', (_req, res) => {

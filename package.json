@@ -11,6 +11,7 @@
     "dev:api": "npm --workspace api run dev",
     "dev:worker": "npm --workspace worker run dev",
     "dev:frontend": "npm --workspace frontend run dev",
+    "seed": "npm --workspace api run seed",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"

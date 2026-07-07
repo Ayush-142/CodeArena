@@ -1,13 +1,22 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { Submission } from '../models/Submission.js';
+import { Problem } from '../models/Problem.js';
 import { submissionsQueue } from '../queue.js';
 
 export const submissionsRouter = Router();
 
 submissionsRouter.post('/', async (req, res) => {
-  const { code, language } = (req.body ?? {}) as { code?: unknown; language?: unknown };
+  const { problemSlug, code, language } = (req.body ?? {}) as {
+    problemSlug?: unknown;
+    code?: unknown;
+    language?: unknown;
+  };
 
+  if (typeof problemSlug !== 'string' || problemSlug.trim().length === 0) {
+    res.status(400).json({ error: 'problemSlug must be a non-empty string' });
+    return;
+  }
   if (typeof code !== 'string' || code.trim().length === 0) {
     res.status(400).json({ error: 'code must be a non-empty string' });
     return;
@@ -17,7 +26,18 @@ submissionsRouter.post('/', async (req, res) => {
     return;
   }
 
-  const submission = await Submission.create({ code, language, status: 'queued' });
+  const problem = await Problem.findOne({ slug: problemSlug, isPublished: true });
+  if (!problem) {
+    res.status(404).json({ error: 'problem not found' });
+    return;
+  }
+
+  const submission = await Submission.create({
+    problemId: problem._id,
+    code,
+    language,
+    status: 'queued',
+  });
   await submissionsQueue.add('judge', { submissionId: submission._id.toString() });
 
   res.status(202).json({ id: submission._id.toString() });
