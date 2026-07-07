@@ -2,11 +2,16 @@ import express from 'express';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { createClient } from 'redis';
+import { submissionsRouter } from './routes/submissions.js';
 
 dotenv.config();
 
+await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
+
 const app = express();
 app.use(express.json());
+
+app.use('/api/submissions', submissionsRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'api' });
