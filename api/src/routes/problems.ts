@@ -1,22 +1,50 @@
 import { Router } from 'express';
 import { Problem } from '../models/Problem.js';
+import { Submission } from '../models/Submission.js';
+import { requireAuth } from '../middleware/auth.js';
+import { AppError, asyncHandler } from '../middleware/errors.js';
 
 export const problemsRouter = Router();
 
-problemsRouter.get('/', async (_req, res) => {
-  const problems = await Problem.find({ isPublished: true })
-    .select('title slug difficulty tags')
-    .lean();
-  res.json(problems);
-});
+problemsRouter.get(
+  '/',
+  asyncHandler(async (_req, res) => {
+    const problems = await Problem.find({ isPublished: true })
+      .select('title slug difficulty tags')
+      .lean();
+    res.json(problems);
+  }),
+);
 
-problemsRouter.get('/:slug', async (req, res) => {
-  const problem = await Problem.findOne({ slug: req.params.slug, isPublished: true })
-    .select('slug title statementMd difficulty tags timeLimitMs memoryLimitMb samples')
-    .lean();
-  if (!problem) {
-    res.status(404).json({ error: 'not found' });
-    return;
-  }
-  res.json(problem);
-});
+// "My submissions for a problem" — scoped implicitly to req.user, so there's no other user's
+// id in the URL to probe; unauthenticated correctly gets 401 (not 404) via requireAuth, since
+// there's no existence-of-a-resource-by-id leak possible here (unlike GET /submissions/:id,
+// where the 404-not-403 rule applies to avoid an id-oracle).
+problemsRouter.get(
+  '/:slug/submissions',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const problem = await Problem.findOne({ slug: req.params.slug, isPublished: true }).select('_id').lean();
+    if (!problem) {
+      throw new AppError(404, 'NOT_FOUND', 'problem not found');
+    }
+    const submissions = await Submission.find({ userId: req.user!.userId, problemId: problem._id })
+      .sort({ createdAt: -1 })
+      .select('status createdAt execTimeMs language')
+      .lean();
+    res.json(submissions);
+  }),
+);
+
+problemsRouter.get(
+  '/:slug',
+  asyncHandler(async (req, res) => {
+    const problem = await Problem.findOne({ slug: req.params.slug, isPublished: true })
+      .select('slug title statementMd difficulty tags timeLimitMs memoryLimitMb samples')
+      .lean();
+    if (!problem) {
+      throw new AppError(404, 'NOT_FOUND', 'not found');
+    }
+    res.json(problem);
+  }),
+);
