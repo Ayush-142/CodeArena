@@ -46,7 +46,11 @@ const worker = new Worker<SubmissionJobData>(
 
     await publisher.publish(
       'verdicts',
-      JSON.stringify({ submissionId: job.data.submissionId, verdict: result.verdict }),
+      JSON.stringify({
+        submissionId: job.data.submissionId,
+        userId: submission.userId.toString(),
+        verdict: result.verdict,
+      }),
     );
 
     return { verdict: result.verdict };

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CodeArena — Socket Test (dev only)</title>
+  <style>
+    body { font-family: monospace; margin: 2rem; }
+    #log { white-space: pre-wrap; background: #111; color: #0f0; padding: 1rem; height: 300px; overflow-y: auto; }
+    #status { font-weight: bold; }
+    input, button { font-family: monospace; font-size: 1rem; padding: 0.25rem; }
+  </style>
+</head>
+<body>
+  <h1>CodeArena Socket.io Test Client</h1>
+  <p>Dev-only debugging tool. Assumes you already have the httpOnly <code>token</code> cookie
+     set in this browser via the real login flow (POST /api/auth/login), same origin as this
+     page.</p>
+
+  <p>Status: <span id="status">disconnected</span></p>
+
+  <div>
+    <label>Submission id to refetch: <input id="submissionId" placeholder="Mongo ObjectId" /></label>
+    <button id="refetchBtn">Refetch via REST (GET /api/submissions/:id)</button>
+  </div>
+
+  <h3>Log</h3>
+  <div id="log"></div>
+
+  <!-- Socket.io's own auto-served client script — same-origin, no CDN dependency. -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    function log(msg) {
+      const line = `[${new Date().toISOString()}] ${msg}`;
+      console.log(line);
+      logEl.textContent += line + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // withCredentials: true is required so the browser attaches the httpOnly `token` cookie
+    // to the WS upgrade request — mirrors the API's cors({credentials:true}).
+    const socket = io({ withCredentials: true });
+
+    socket.on('connect', () => {
+      statusEl.textContent = `connected (${socket.id})`;
+      log(`connected, socket id = ${socket.id}`);
+    });
+
+    socket.on('connect_error', (err) => {
+      statusEl.textContent = 'connect_error';
+      log(`connect_error: ${err.message}`);
+    });
+
+    socket.on('disconnect', (reason) => {
+      statusEl.textContent = `disconnected (${reason})`;
+      log(`disconnected: ${reason}`);
+    });
+
+    // Reconnect/fallback: push is speed, REST is truth. On reconnect, do NOT trust that any
+    // verdict emitted while we were disconnected was received — refetch the true state.
+    socket.io.on('reconnect', (attempt) => {
+      log(`reconnected after ${attempt} attempt(s) — refetch via REST to recover missed events`);
+      const id = document.getElementById('submissionId').value.trim();
+      if (id) refetchSubmission(id);
+    });
+
+    // Client-facing payload is exactly { submissionId, verdict } — see api/src/socket/types.ts.
+    socket.on('verdict', (payload) => {
+      log(`verdict event received: ${JSON.stringify(payload)}`);
+    });
+
+    async function refetchSubmission(id) {
+      try {
+        const res = await fetch(`/api/submissions/${id}`, { credentials: 'include' });
+        const body = await res.json();
+        log(`REST refetch /api/submissions/${id} -> ${res.status} ${JSON.stringify(body)}`);
+      } catch (err) {
+        log(`REST refetch failed: ${err.message}`);
+      }
+    }
+
+    document.getElementById('refetchBtn').addEventListener('click', () => {
+      const id = document.getElementById('submissionId').value.trim();
+      if (!id) { log('enter a submission id first'); return; }
+      refetchSubmission(id);
+    });
+  </script>
+</body>
+</html>

@@ -154,8 +154,9 @@ Conventions:
 - Shared types (verdicts, socket event payloads, API DTOs) live in a `/shared` package
   or are duplicated deliberately with a comment — never drift silently.
 - All Redis keys namespaced: `queue:*` (BullMQ manages its own), `lb:{contestId}`,
-  `rl:{scope}:{userId}`, `cache:problem:{slug}`, `cache:hint:{key}`, `ch:verdicts`
-  (pub/sub channel).
+  `rl:{scope}:{userId}`, `cache:problem:{slug}`, `cache:hint:{key}`. The verdict pub/sub
+  channel is named `verdicts` (no prefix) — see §7 for why it's a documented exception to
+  this convention rather than a typo.
 - Commit after every verified feature; imperative commit messages.
 
 ---
@@ -247,13 +248,13 @@ Kept for auditability, cost tracking, and cache warm-up.
    e. All passed → `AC`.
 4. **Record + publish.** Worker writes final verdict to MongoDB, then publishes
    `{ submissionId, userId, contestId?, verdict, execTimeMs, failedTestIndex? }`
-   to Redis Pub/Sub channel `ch:verdicts`.
+   to Redis Pub/Sub channel `verdicts`.
 5. **Contest scoring (if contestId present).** Worker (or a thin scoring module it
    calls) applies scoring atomically: on first `AC` for (user, problem) →
    `ZINCRBY lb:{contestId}` with score delta; wrong attempts tracked for penalty.
    Scoring writes go to BOTH Redis (live) and MongoDB (durable) — Redis for reads,
    Mongo for truth.
-6. **Deliver.** Socket server(s), subscribed to `ch:verdicts`, emit:
+6. **Deliver.** Socket server(s), subscribed to `verdicts`, emit:
    - `verdict` → to the submitting user's room `user:{userId}`
    - `leaderboard:update` → to room `contest:{contestId}` (if applicable)
 7. **Client.** UI transitions Queued → Running → final verdict badge; leaderboard
@@ -305,8 +306,13 @@ Enumerate deliberately; each is a separate concept and a separate interview answ
 
 1. **Job queue (BullMQ)** — decouples accepting submissions from judging them.
    Absorbs contest-start bursts; workers scale on queue depth.
-2. **Pub/Sub** — the worker → socket-server bridge (`ch:verdicts`), plus the
+2. **Pub/Sub** — the worker → socket-server bridge (channel `verdicts`), plus the
    Socket.io Redis adapter's internal channels for multi-instance socket scaling.
+   Note: `verdicts` deliberately breaks the `{scope}:{key}` namespacing convention used
+   everywhere else in this section (`lb:`, `rl:`, `cache:`) — it predates that convention
+   and both the worker (publisher) and socket server (subscriber) already agree on the
+   literal name. Candidate for a `ch:verdicts` rename during the Phase 7 hardening pass,
+   updating both sides together — not worth a piecemeal rename mid-feature.
 3. **Live leaderboards** — `ZSET` per contest (`lb:{contestId}`).
    `ZINCRBY` on score events, `ZREVRANGE ... WITHSCORES` for reads, rank via `ZREVRANK`.
    O(log N) updates, zero DB reads on the hot path. TTL'd after contest end
@@ -331,9 +337,23 @@ single Redis is a SPOF in the student deployment; production path is Sentinel/Cl
 
 - Socket.io server(s) use the **Redis adapter** from day one, even with a single
   instance — this is what makes horizontal scaling a deploy change, not a code change.
-- **Auth:** JWT passed in the connection handshake (`auth: { token }`); server verifies
-  before joining rooms. Unauthenticated sockets may only join public rooms
-  (e.g. public contest leaderboard) — decide and enforce explicitly.
+- **Auth:** JWT lives in the same httpOnly cookie used by the REST API (`token`, see
+  `api/src/middleware/auth.ts`) — never `auth: { token }` over the wire, and never exposed
+  to frontend JS. At handshake, the socket server (`api/src/socket/index.ts`) parses
+  `socket.handshake.headers.cookie` (the raw `Cookie` header — there is no cookie-parser
+  in the handshake path) with the `cookie` package, then verifies the JWT with
+  `verifyAuthToken`, the exact same verification function `attachUser` uses for REST
+  requests — never duplicated. Sockets without a valid cookie/JWT are rejected at
+  handshake with a connection error; there are no unauthenticated/public rooms in this
+  phase. The socket server uses the same CORS origin allowlist as the API
+  (`env.corsOrigins`, from `CORS_ORIGIN`) with `credentials: true`. The token is verified
+  once, at handshake, only — mid-connection expiry is accepted for v1 (see TODO in
+  `api/src/socket/index.ts`); revisit with a refresh-token upgrade.
+  **Deployment constraint:** exactly as documented for the REST cookie
+  (`api/src/middleware/auth.ts:27-32`), `SameSite=Strict` means the browser only attaches
+  the cookie — and therefore the socket handshake only carries auth — when the frontend
+  and the socket server share a registrable domain (eTLD+1). This applies to the
+  Socket.io handshake identically to REST; it is not a separate concern to solve later.
 - **Rooms:** `user:{userId}` (private verdict/hint events), `contest:{contestId}`
   (leaderboard deltas, announcements, start/end events).
 - **Events (typed, shared with frontend):**

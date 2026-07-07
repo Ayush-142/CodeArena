@@ -40,6 +40,15 @@ export function authCookieOptions(): CookieOptions {
   };
 }
 
+// Pure verification: throws on missing/invalid/expired token, never touches Express types.
+// This is the SAME jwt.verify call attachUser uses for REST requests and the socket handshake
+// auth middleware (api/src/socket/index.ts) uses for WS connections — one verification path,
+// not two copies of jwt.verify with the same secret.
+export function verifyAuthToken(token: string): AuthUser {
+  const payload = jwt.verify(token, env.jwtSecret) as AuthUser;
+  return { userId: payload.userId, handle: payload.handle, isAdmin: payload.isAdmin };
+}
+
 // Populates req.user from the cookie JWT if present/valid; never rejects the request itself —
 // public routes need this to run without erroring. Mount globally, after cookie-parser.
 export function attachUser(req: Request, _res: Response, next: NextFunction): void {
@@ -49,8 +58,7 @@ export function attachUser(req: Request, _res: Response, next: NextFunction): vo
     return;
   }
   try {
-    const payload = jwt.verify(token, env.jwtSecret) as AuthUser;
-    req.user = { userId: payload.userId, handle: payload.handle, isAdmin: payload.isAdmin };
+    req.user = verifyAuthToken(token);
   } catch {
     // expired/invalid/tampered token: treat as unauthenticated, don't error the request
   }

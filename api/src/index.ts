@@ -1,4 +1,6 @@
 import 'dotenv/config'; // MUST be first: loads .env before any other module reads process.env
+import http from 'node:http';
+import path from 'node:path';
 import express from 'express';
 import mongoose from 'mongoose';
 import cookieParser from 'cookie-parser';
@@ -11,6 +13,7 @@ import { AppError, errorHandler } from './middleware/errors.js';
 import { authRouter } from './routes/auth.js';
 import { submissionsRouter } from './routes/submissions.js';
 import { problemsRouter } from './routes/problems.js';
+import { initSocket } from './socket/index.js';
 
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
 
@@ -24,6 +27,13 @@ app.use(attachUser); // after cookie-parser (needs req.cookies), before all rout
 app.use('/api/auth', authRouter);
 app.use('/api/problems', problemsRouter);
 app.use('/api/submissions', submissionsRouter);
+
+// Dev-only static test client (api/public/socket-test.html) — never served in production.
+// Placed before the 404 catch-all below so requests for it don't fall through to it.
+if (process.env.NODE_ENV !== 'production') {
+  // import.meta.dirname requires Node >=20.11 (see "engines" in package.json).
+  app.use(express.static(path.join(import.meta.dirname, '../public')));
+}
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'api' });
@@ -55,7 +65,10 @@ app.use((req, _res, next) => {
 
 app.use(errorHandler); // must be last — Express identifies error middleware by 4-arg signature
 
+const httpServer = http.createServer(app);
+await initSocket(httpServer);
+
 const port = Number(process.env.PORT || 3001);
-app.listen(port, () => {
+httpServer.listen(port, () => {
   console.log(`API listening on ${port}`);
 });

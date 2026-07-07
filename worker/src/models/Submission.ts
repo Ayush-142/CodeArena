@@ -5,6 +5,7 @@ export type Verdict = (typeof VERDICTS)[number];
 
 const submissionSchema = new Schema(
   {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     problemId: { type: Schema.Types.ObjectId, ref: 'Problem', required: true, index: true },
     code: { type: String, required: true },
     language: { type: String, required: true, enum: ['cpp'] },
