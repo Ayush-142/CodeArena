@@ -13,6 +13,8 @@ import { AppError, errorHandler } from './middleware/errors.js';
 import { authRouter } from './routes/auth.js';
 import { submissionsRouter } from './routes/submissions.js';
 import { problemsRouter } from './routes/problems.js';
+import { contestsRouter } from './routes/contests.js';
+import { adminContestsRouter } from './routes/adminContests.js';
 import { initSocket } from './socket/index.js';
 
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
@@ -27,6 +29,8 @@ app.use(attachUser); // after cookie-parser (needs req.cookies), before all rout
 app.use('/api/auth', authRouter);
 app.use('/api/problems', problemsRouter);
 app.use('/api/submissions', submissionsRouter);
+app.use('/api/contests', contestsRouter);
+app.use('/api/admin/contests', adminContestsRouter);
 
 // Dev-only static test client (api/public/socket-test.html) — never served in production.
 // Placed before the 404 catch-all below so requests for it don't fall through to it.

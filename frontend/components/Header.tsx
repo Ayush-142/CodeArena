@@ -18,7 +18,13 @@ export function Header() {
       <Link href="/problems" className="font-semibold">
         CodeArena
       </Link>
-      <div>
+      <div className="flex items-center gap-4">
+        <Link href="/problems" className="underline">
+          Problems
+        </Link>
+        <Link href="/contests" className="underline">
+          Contests
+        </Link>
         {status === 'authenticated' && user ? (
           <span>
             logged in as {user.handle}{' '}

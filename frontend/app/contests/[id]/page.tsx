@@ -1,0 +1,257 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
+import { useSocket } from '@/components/SocketProvider';
+import { MarkdownStatement } from '@/components/MarkdownStatement';
+import { MonacoEditorPanel } from '@/components/MonacoEditorPanel';
+import { VerdictBadge } from '@/components/VerdictBadge';
+import { CountdownTimer } from '@/components/CountdownTimer';
+import {
+  ApiError,
+  createSubmission,
+  getContest,
+  getRetryAfterSeconds,
+  getSubmission,
+  registerForContest,
+} from '@/lib/api';
+import type { ContestDetailResponse, ProblemDetail, SubmissionStatus, VerdictClientEvent } from '@/lib/types';
+
+const TERMINAL_STATUSES: SubmissionStatus[] = ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE'];
+
+interface SubmissionView {
+  status: SubmissionStatus;
+  failedTestIndex?: number;
+  execTimeMs?: number;
+}
+
+export default function ContestDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { status: authStatus } = useAuth();
+  const socket = useSocket();
+
+  const [data, setData] = useState<ContestDetailResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+
+  const [selectedProblem, setSelectedProblem] = useState<ProblemDetail | null>(null);
+  const [code, setCode] = useState('');
+  const [currentSubmissionId, setCurrentSubmissionId] = useState<string | null>(null);
+  const [submissionView, setSubmissionView] = useState<SubmissionView | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const currentSubmissionIdRef = useRef<string | null>(null);
+  const idempotencyKeyRef = useRef<string | null>(null);
+  const oneShotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const refetchContest = useCallback(() => {
+    getContest(id)
+      .then(setData)
+      .catch(() => setError('Failed to load contest'));
+  }, [id]);
+
+  useEffect(() => {
+    setData(null);
+    setError(null);
+    setSelectedProblem(null);
+    refetchContest();
+  }, [id, refetchContest]);
+
+  const refetchSubmission = useCallback(async (submissionId: string) => {
+    if (submissionId !== currentSubmissionIdRef.current) return;
+    try {
+      const sub = await getSubmission(submissionId);
+      if (submissionId !== currentSubmissionIdRef.current) return;
+      setSubmissionView({ status: sub.status, failedTestIndex: sub.failedTestIndex, execTimeMs: sub.execTimeMs });
+      if (TERMINAL_STATUSES.includes(sub.status) && oneShotTimerRef.current) {
+        clearTimeout(oneShotTimerRef.current);
+        oneShotTimerRef.current = null;
+      }
+    } catch {
+      // Transient — the socket event or the next trigger retries.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!socket || !currentSubmissionId) return;
+    function handleVerdict(payload: VerdictClientEvent) {
+      // REST is truth, the socket is only a notification to refetch.
+      if (payload.submissionId === currentSubmissionId) {
+        void refetchSubmission(currentSubmissionId);
+      }
+    }
+    socket.on('verdict', handleVerdict);
+    return () => {
+      socket.off('verdict', handleVerdict);
+    };
+  }, [socket, currentSubmissionId, refetchSubmission]);
+
+  function selectProblem(problem: ProblemDetail) {
+    setSelectedProblem(problem);
+    setCode('');
+    setCurrentSubmissionId(null);
+    currentSubmissionIdRef.current = null;
+    setSubmissionView(null);
+    setSubmitError(null);
+  }
+
+  async function handleRegister() {
+    if (authStatus !== 'authenticated') {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    setRegistering(true);
+    setRegisterError(null);
+    try {
+      await registerForContest(id);
+      refetchContest();
+    } catch (err) {
+      setRegisterError(err instanceof ApiError ? err.message : 'Registration failed');
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function handleSubmit() {
+    if (!selectedProblem) return;
+    if (authStatus !== 'authenticated') {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+
+    if (idempotencyKeyRef.current === null) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
+    const key = idempotencyKeyRef.current;
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await createSubmission(selectedProblem.slug, code, 'cpp', key, id);
+      currentSubmissionIdRef.current = res.id;
+      setCurrentSubmissionId(res.id);
+      setSubmissionView({ status: 'queued' });
+
+      if (oneShotTimerRef.current) clearTimeout(oneShotTimerRef.current);
+      oneShotTimerRef.current = setTimeout(() => {
+        void refetchSubmission(res.id);
+      }, 800);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'RATE_LIMITED') {
+        const seconds = getRetryAfterSeconds(err);
+        setSubmitError(`rate limited, try again in ${seconds ?? '?'}s`);
+      } else if (err instanceof ApiError) {
+        setSubmitError(err.message);
+      } else {
+        setSubmitError('Submission failed');
+      }
+    } finally {
+      idempotencyKeyRef.current = null;
+      setSubmitting(false);
+    }
+  }
+
+  if (error) return <main className="p-4">{error}</main>;
+  if (!data) return <main className="p-4">Loading…</main>;
+
+  const { contest, phase, isRegistered, problems } = data;
+
+  return (
+    <main className="flex flex-col gap-6 p-4">
+      <div>
+        <h1 className="text-xl font-semibold">{contest.title}</h1>
+        {phase === 'upcoming' ? (
+          <p className="text-sm">
+            starts in <CountdownTimer targetTime={contest.startAt} serverTime={data.serverTime} />
+          </p>
+        ) : phase === 'running' ? (
+          <p className="text-sm text-yellow-400">
+            running · ends in <CountdownTimer targetTime={contest.endAt} serverTime={data.serverTime} />
+          </p>
+        ) : (
+          <p className="text-sm text-slate-400">ended</p>
+        )}
+      </div>
+
+      {phase === 'upcoming' && !isRegistered ? (
+        <div>
+          <button onClick={handleRegister} disabled={registering} className="border border-slate-600 p-2">
+            {registering ? 'Registering…' : 'Register'}
+          </button>
+          {registerError ? <p className="mt-2 text-red-400">{registerError}</p> : null}
+        </div>
+      ) : phase === 'upcoming' && isRegistered ? (
+        <p className="text-green-400">You&apos;re registered.</p>
+      ) : null}
+
+      {phase !== 'upcoming' ? (
+        <Link href={`/contests/${id}/leaderboard`} className="text-sm underline">
+          View leaderboard
+        </Link>
+      ) : null}
+
+      {phase === 'running' ? (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h2 className="mb-2 font-semibold">Problems</h2>
+            <ul className="flex flex-wrap gap-2">
+              {problems.map((p) => (
+                <li key={p.slug}>
+                  <button
+                    onClick={() => selectProblem(p)}
+                    className={`border border-slate-600 p-2 ${selectedProblem?.slug === p.slug ? 'bg-slate-800' : ''}`}
+                  >
+                    {p.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {selectedProblem ? (
+            <div className="flex flex-col gap-4">
+              <MarkdownStatement statementMd={selectedProblem.statementMd} />
+              <MonacoEditorPanel code={code} onChange={setCode} />
+              <div>
+                <button onClick={handleSubmit} disabled={submitting} className="border border-slate-600 p-2">
+                  {submitting ? 'Submitting…' : 'Submit'}
+                </button>
+                {submitError ? <p className="mt-2 text-red-400">{submitError}</p> : null}
+                {submissionView ? (
+                  <p className="mt-2">
+                    <VerdictBadge
+                      status={submissionView.status}
+                      failedTestIndex={submissionView.failedTestIndex}
+                      execTimeMs={submissionView.execTimeMs}
+                    />
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {phase === 'ended' ? (
+        <div>
+          <h2 className="mb-2 font-semibold">Problems (now public practice)</h2>
+          <ul className="flex flex-col gap-2">
+            {problems.map((p) => (
+              <li key={p.slug}>
+                <Link href={`/problems/${p.slug}`} className="underline">
+                  {p.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </main>
+  );
+}

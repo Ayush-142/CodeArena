@@ -1,23 +1,17 @@
-import dotenv from 'dotenv';
+import 'dotenv/config'; // MUST be first: loads .env before redis.ts reads process.env.REDIS_URL
 import mongoose from 'mongoose';
 import { Worker } from 'bullmq';
-import { createClient } from 'redis';
 import { Submission } from './models/Submission.js';
 import { Problem } from './models/Problem.js';
 import { judge } from './judge.js';
-
-dotenv.config();
+import { redisUrl, redisClient } from './redis.js';
+import { scoreContestSubmission } from './scoring.js';
 
 interface SubmissionJobData {
   submissionId: string;
 }
 
-const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
-
-const publisher = createClient({ url: redisUrl });
-await publisher.connect();
 
 const worker = new Worker<SubmissionJobData>(
   'submissions',
@@ -44,7 +38,7 @@ const worker = new Worker<SubmissionJobData>(
     submission.compileError = result.compileError;
     await submission.save();
 
-    await publisher.publish(
+    await redisClient.publish(
       'verdicts',
       JSON.stringify({
         submissionId: job.data.submissionId,
@@ -52,6 +46,15 @@ const worker = new Worker<SubmissionJobData>(
         verdict: result.verdict,
       }),
     );
+
+    // Contest scoring must never fail the judge job — a scoring bug shouldn't cause
+    // BullMQ to re-run compile+sandbox+run for something that already has a verdict.
+    // Any missed increment self-heals at the next leaderboard rebuild/finalization.
+    try {
+      await scoreContestSubmission(submission);
+    } catch (err) {
+      console.error(`[worker] contest scoring failed for submission ${submission._id.toString()}`, err);
+    }
 
     return { verdict: result.verdict };
   },

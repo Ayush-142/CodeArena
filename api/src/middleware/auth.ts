@@ -73,3 +73,17 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
   }
   next();
 }
+
+// Route guard: mount after requireAuth on anything admin-only. Mirrors requireAuth's
+// shape — 401 if unauthenticated at all, 403 if authenticated but not an admin.
+export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.user) {
+    next(new AppError(401, 'UNAUTHENTICATED', 'Authentication required'));
+    return;
+  }
+  if (!req.user.isAdmin) {
+    next(new AppError(403, 'FORBIDDEN', 'Admin access required'));
+    return;
+  }
+  next();
+}

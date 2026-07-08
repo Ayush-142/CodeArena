@@ -14,6 +14,12 @@ const submissionSchema = new Schema(
     execTimeMs: { type: Number },
     output: { type: String },
     compileError: { type: String },
+    // Absent = practice submission. Present = judged under contest rules; see scoring.ts.
+    contestId: { type: Schema.Types.ObjectId, ref: 'Contest' },
+    // Worker-side idempotency guard: set exactly once, atomically, the first time this
+    // submission's AC is scored — protects against BullMQ retry/stalled-job re-pickup
+    // double-incrementing the leaderboard. See scoring.ts.
+    contestScored: { type: Boolean, required: true, default: false },
   },
   { timestamps: true },
 );

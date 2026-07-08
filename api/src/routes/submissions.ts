@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { Submission } from '../models/Submission.js';
 import { Problem } from '../models/Problem.js';
+import { Contest } from '../models/Contest.js';
 import { submissionsQueue } from '../queue.js';
 import { requireAuth } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -50,10 +51,11 @@ submissionsRouter.post(
   idempotencyShortCircuit,
   submissionRateLimiter,
   asyncHandler(async (req, res) => {
-    const { problemSlug, code, language } = (req.body ?? {}) as {
+    const { problemSlug, code, language, contestId } = (req.body ?? {}) as {
       problemSlug?: unknown;
       code?: unknown;
       language?: unknown;
+      contestId?: unknown;
     };
 
     if (typeof problemSlug !== 'string' || problemSlug.trim().length === 0) {
@@ -65,13 +67,35 @@ submissionsRouter.post(
     if (language !== 'cpp') {
       throw new AppError(400, 'VALIDATION_ERROR', "language must be 'cpp'");
     }
+    if (contestId !== undefined && (typeof contestId !== 'string' || !mongoose.isValidObjectId(contestId))) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'contestId must be a valid id');
+    }
 
-    const problem = await Problem.findOne({ slug: problemSlug, isPublished: true });
+    const userId = req.user!.userId;
+    let problem;
+
+    if (contestId) {
+      const contest = await Contest.findById(contestId).select('startAt endAt registeredUserIds problemIds').lean();
+      if (!contest) {
+        throw new AppError(404, 'NOT_FOUND', 'contest not found');
+      }
+      const now = Date.now();
+      if (now < contest.startAt.getTime() || now > contest.endAt.getTime()) {
+        throw new AppError(409, 'CONTEST_NOT_RUNNING', 'this contest is not currently running');
+      }
+      if (!contest.registeredUserIds.some((rid) => rid.toString() === userId)) {
+        throw new AppError(403, 'CONTEST_NOT_REGISTERED', 'you must be registered for this contest');
+      }
+      // Deliberately not filtered by isPublished:true — contest problems stay
+      // unpublished until finalization (see api/src/contests/rebuild.ts).
+      problem = await Problem.findOne({ slug: problemSlug, _id: { $in: contest.problemIds } });
+    } else {
+      problem = await Problem.findOne({ slug: problemSlug, isPublished: true });
+    }
     if (!problem) {
       throw new AppError(404, 'NOT_FOUND', 'problem not found');
     }
 
-    const userId = req.user!.userId;
     const idempotencyKey = req.idempotencyKey!;
 
     let submission;
@@ -83,6 +107,7 @@ submissionsRouter.post(
         language,
         status: 'queued',
         idempotencyKey,
+        contestId: contestId || undefined,
       });
     } catch (err) {
       // Race: two concurrent identical retries can both pass idempotencyShortCircuit's

@@ -1,9 +1,13 @@
 import type {
   ApiErrorBody,
   AuthUser,
+  ContestDetailResponse,
+  ContestListResponse,
   CreateSubmissionResponse,
+  LeaderboardResponse,
   ProblemDetail,
   ProblemSummary,
+  RegisterContestResponse,
   SubmissionDetail,
   SubmissionHistoryItem,
 } from './types';
@@ -115,14 +119,31 @@ export function createSubmission(
   code: string,
   language: 'cpp',
   idempotencyKey: string,
+  contestId?: string,
 ): Promise<CreateSubmissionResponse> {
   return apiFetch<CreateSubmissionResponse>('/api/submissions', {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: JSON.stringify({ problemSlug, code, language }),
+    body: JSON.stringify({ problemSlug, code, language, ...(contestId ? { contestId } : {}) }),
   });
 }
 
 export function getSubmission(id: string): Promise<SubmissionDetail> {
   return apiFetch<SubmissionDetail>(`/api/submissions/${id}`);
+}
+
+export function getContests(): Promise<ContestListResponse> {
+  return apiFetch<ContestListResponse>('/api/contests');
+}
+
+export function getContest(id: string): Promise<ContestDetailResponse> {
+  return apiFetch<ContestDetailResponse>(`/api/contests/${id}`);
+}
+
+export function registerForContest(id: string): Promise<RegisterContestResponse> {
+  return apiFetch<RegisterContestResponse>(`/api/contests/${id}/register`, { method: 'POST' });
+}
+
+export function getContestLeaderboard(id: string, offset = 0, limit = 50): Promise<LeaderboardResponse> {
+  return apiFetch<LeaderboardResponse>(`/api/contests/${id}/leaderboard?offset=${offset}&limit=${limit}`);
 }

@@ -3,6 +3,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
 import { parse as parseCookieHeader } from 'cookie';
+import mongoose from 'mongoose';
 import { env } from '../config/env.js';
 import { AUTH_COOKIE_NAME, verifyAuthToken } from '../middleware/auth.js';
 import type {
@@ -11,9 +12,15 @@ import type {
   SocketData,
   VerdictClientEvent,
   VerdictPubSubMessage,
+  LeaderboardClientEvent,
+  LeaderboardPubSubMessage,
 } from './types.js';
 
 const VERDICTS_CHANNEL = 'verdicts';
+// New channel, so unlike the legacy unprefixed `verdicts` (a documented pre-convention
+// exception — see ARCHITECTURE.md §3/§7), this follows the general ch:*/scoped-key
+// namespacing convention from the start.
+const LEADERBOARD_CHANNEL = 'ch:leaderboard';
 
 // Single entry point. Zero imports from routes/* — this module must stay movable to its own
 // process/workspace later by changing only the bootstrap that calls initSocket(httpServer).
@@ -75,6 +82,19 @@ export async function initSocket(
     socket.join(room);
     console.log(`[socket] ${socket.id} connected as ${user.handle} (${user.userId}), joined room ${room}`);
 
+    // Contest-room membership isn't derivable from the JWT the way user:{userId} is, so
+    // the client asks explicitly. No authorization check beyond a well-formed id — contest
+    // leaderboards are effectively public reads once running/ended, matching the public
+    // GET /api/contests/:id/leaderboard REST endpoint.
+    socket.on('contest:join', ({ contestId }) => {
+      if (typeof contestId !== 'string' || !mongoose.isValidObjectId(contestId)) return;
+      socket.join(`contest:${contestId}`);
+    });
+    socket.on('contest:leave', ({ contestId }) => {
+      if (typeof contestId !== 'string' || !mongoose.isValidObjectId(contestId)) return;
+      socket.leave(`contest:${contestId}`);
+    });
+
     socket.on('disconnect', (reason) => {
       console.log(`[socket] ${socket.id} disconnected (${reason})`);
     });
@@ -107,6 +127,34 @@ export async function initSocket(
     const payload: VerdictClientEvent = { submissionId: parsed.submissionId, verdict: parsed.verdict };
     io.to(room).emit('verdict', payload);
     console.log(`[socket] emitted verdict (submission=${parsed.submissionId}) to room ${room}`);
+  });
+
+  // Same client, second subscription — node-redis v4 supports multiple channel
+  // subscriptions per subscriber-mode client, so no 4th dedicated client is needed.
+  await verdictSubscriber.subscribe(LEADERBOARD_CHANNEL, (message) => {
+    let parsed: LeaderboardPubSubMessage;
+    try {
+      parsed = JSON.parse(message) as LeaderboardPubSubMessage;
+    } catch (err) {
+      console.error('[socket] failed to parse leaderboard message', err, message);
+      return;
+    }
+    if (!parsed.contestId) {
+      console.error('[socket] leaderboard message missing contestId, dropping', parsed);
+      return;
+    }
+    const room = `contest:${parsed.contestId}`;
+    const payload: LeaderboardClientEvent = { contestId: parsed.contestId, finalized: parsed.finalized };
+    io.to(room).emit('leaderboard:update', payload);
+    if (parsed.finalized) {
+      // Only contest:announcement producer in this phase — no admin-authored
+      // announcement endpoint exists (not in ARCHITECTURE.md's API surface).
+      io.to(room).emit('contest:announcement', {
+        contestId: parsed.contestId,
+        message: 'Contest finalized — final standings are posted.',
+      });
+    }
+    console.log(`[socket] emitted leaderboard:update (contest=${parsed.contestId}) to room ${room}`);
   });
 
   return io;

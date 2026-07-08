@@ -409,16 +409,22 @@ POST   /api/auth/login               → JWT
 GET    /api/problems                 list (filter: difficulty, tags, solved) [cached]
 GET    /api/problems/:slug           statement + samples [cached]
 POST   /api/submissions              submit code (rate-limited, idempotent) → 202
+                                      body accepts an optional contestId — when present,
+                                      gated on the contest being "running" and the caller
+                                      being registered (see Phase 5)
 GET    /api/submissions/:id          status/verdict (polling fallback + history)
 GET    /api/problems/:slug/submissions   my submissions for a problem
 POST   /api/hints                    request hint level N for a submission
-GET    /api/contests                 lobby list
-POST   /api/contests/:id/register
-GET    /api/contests/:id             contest detail + problems (gated by startAt)
-GET    /api/contests/:id/leaderboard paginated standings (Redis-backed)
+GET    /api/contests                 lobby list, sorted by startAt
+POST   /api/contests/:id/register    requireAuth; only before startAt
+GET    /api/contests/:id             contest detail; problems: [] unless the phase is
+                                      running (+ caller registered) or ended
+GET    /api/contests/:id/leaderboard paginated standings (Redis-backed live, Mongo-backed
+                                      once finalized); ?offset=&limit=
 --- admin (role-gated) ---
 POST/PUT /api/admin/problems         author problems, upload test cases
-POST/PUT /api/admin/contests
+POST   /api/admin/contests           requireAuth + requireAdmin
+PUT    /api/admin/contests/:id       requireAuth + requireAdmin; rejects once finalized
 ```
 
 Cross-cutting: use a consistent error shape `{ error: { code, message } }`;
@@ -480,24 +486,27 @@ The architecture is deliberately such that scale-out changes deployment only:
 Phase 0 — DONE: monorepo scaffold, local infra (Mongo, Redis via docker-compose),
 health checks, hello-world worker.
 
-Phase 1 — **Walking skeleton (current):** POST /submissions → queue → Docker sandbox
+Phase 1 — DONE: walking skeleton. POST /submissions → queue → Docker sandbox
 run against one hardcoded test → verdict to Mongo → pub/sub publish. Verified by
 4 curl tests: AC, WA, TLE, CE paths.
 
-Phase 2 — Real judging: test cases from object storage (MinIO locally) + worker-local
-cache; multi-test loop; MLE/RE verdicts; compile/run split; problems collection +
-admin seed script with 3–5 real problems.
+Phase 2 — DONE: real judging. Test cases from object storage (MinIO locally) +
+worker-local cache; multi-test loop; MLE/RE verdicts; compile/run split; problems
+collection + admin seed script with 3–5 real problems.
 
-Phase 3 — Auth (JWT) + rate limiting + idempotency keys.
+Phase 3 — DONE: auth (JWT) + rate limiting + idempotency keys.
 
-Phase 4 — Socket layer: verdict push, reconnect/pull fallback. Frontend: problems
-list + problem-solving page (Monaco, submit, live verdict UI).
+Phase 4 — DONE: socket layer (verdict push, reconnect/pull fallback) + frontend
+problems list + problem-solving page (Monaco, submit, live verdict UI).
 
-Phase 5 — Contests: model, registration, gating, scoring module, ZSET leaderboard,
-contest room broadcasts, leaderboard UI, finalization job.
+Phase 5 — DONE: contests. Contest model + registration + startAt/endAt gating,
+worker-side ICPC-style scoring module (worker/src/scoring.ts), Redis ZSET
+leaderboard with Mongo-backed rebuild/finalization (api/src/contests/rebuild.ts),
+contest:{id} room socket broadcasts (leaderboard:update, contest:announcement),
+lazy finalization job, and frontend lobby/detail/leaderboard pages.
 
-Phase 6 — AI hints: prompt module + leveling, streaming over sockets, rate limits,
-caching, hint panel UI.
+Phase 6 — **AI hints (current):** prompt module + leveling, streaming over sockets,
+rate limits, caching, hint panel UI.
 
 Phase 7 — Hardening + polish: metrics, CI, seed data, deploy, README with
 architecture diagram, demo script.

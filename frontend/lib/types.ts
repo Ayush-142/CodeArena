@@ -63,8 +63,87 @@ export interface SubmissionDetail {
   output?: string;
   compileError?: string;
   idempotencyKey: string;
+  contestId?: string;
+  contestScored?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// api/src/routes/contests.ts GET / — wrapped (not a bare array) so serverTime can ride
+// along for the clock-skew offset (see CountdownTimer)
+export interface ContestSummary {
+  _id: string;
+  slug: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  problemCount: number;
+  isRegistered: boolean;
+}
+
+export interface ContestListResponse {
+  serverTime: number;
+  contests: ContestSummary[];
+}
+
+export type ContestPhase = 'upcoming' | 'running' | 'ended';
+
+export interface ContestMeta {
+  _id: string;
+  slug: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  isFinalized: boolean;
+}
+
+// api/src/routes/contests.ts GET /:id — problems is [] unless phase is running (and the
+// caller is registered) or ended
+export interface ContestDetailResponse {
+  serverTime: number;
+  contest: ContestMeta;
+  phase: ContestPhase;
+  isRegistered: boolean;
+  problems: ProblemDetail[];
+}
+
+export interface RegisterContestResponse {
+  registered: boolean;
+}
+
+// api/src/routes/contests.ts GET /:id/leaderboard
+export interface LeaderboardRow {
+  rank: number;
+  userId: string;
+  handle: string;
+  solvedCount: number;
+  penaltyMinutes: number;
+}
+
+export interface LeaderboardMeRow {
+  rank: number;
+  solvedCount: number;
+  penaltyMinutes: number;
+}
+
+export interface LeaderboardResponse {
+  serverTime: number;
+  isFinalized: boolean;
+  total: number;
+  rows: LeaderboardRow[];
+  me: LeaderboardMeRow | null;
+}
+
+// Mirrors api/src/socket/types.ts LeaderboardClientEvent — a "go refetch" signal only,
+// same contract discipline as VerdictClientEvent below.
+export interface LeaderboardClientEvent {
+  contestId: string;
+  finalized?: boolean;
+}
+
+export interface ContestAnnouncementEvent {
+  contestId: string;
+  message: string;
 }
 
 // api/src/routes/submissions.ts POST / — field is `id`, not `submissionId`, on every

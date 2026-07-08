@@ -21,14 +21,38 @@ export interface VerdictPubSubMessage {
   verdict: string;
 }
 
+/**
+ * Raw message shape published to Redis channel `ch:leaderboard` by both the worker
+ * (worker/src/scoring.ts, on each scored AC) and the API (api/src/contests/rebuild.ts,
+ * on finalization). `finalized` is only ever true on the finalization publish.
+ */
+export interface LeaderboardPubSubMessage {
+  contestId: string;
+  finalized?: boolean;
+}
+
+/** Client-facing leaderboard-change notification — a "go refetch REST" signal only,
+ * never a source of truth (same philosophy as VerdictClientEvent). */
+export interface LeaderboardClientEvent {
+  contestId: string;
+  finalized?: boolean;
+}
+
 // Socket.io generic type params (Server<ListenEvents, EmitEvents, ServerSideEvents, SocketData>)
 // — scoped to this module only, no `declare module 'socket.io'` global augmentation.
 export interface ServerToClientEvents {
   verdict: (payload: VerdictClientEvent) => void;
+  'leaderboard:update': (payload: LeaderboardClientEvent) => void;
+  'contest:announcement': (payload: { contestId: string; message: string }) => void;
 }
 
-// No client→server business events in this phase — all mutations go through REST.
-export type ClientToServerEvents = Record<string, never>;
+// First client→server events in this codebase — contest-room membership isn't derivable
+// from the JWT the way `user:{userId}` is, so the client has to ask to join/leave. Still
+// no business actions over sockets: joining a room isn't a mutation, all writes remain REST.
+export interface ClientToServerEvents {
+  'contest:join': (payload: { contestId: string }) => void;
+  'contest:leave': (payload: { contestId: string }) => void;
+}
 
 export interface SocketData {
   user: AuthUser;
