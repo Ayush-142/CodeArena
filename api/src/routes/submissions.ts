@@ -89,6 +89,11 @@ submissionsRouter.post(
       // findOne and both attempt this create. The {userId, idempotencyKey} unique index makes
       // the loser throw E11000 — re-fetch and return the winner's id instead of erroring, so
       // idempotency semantics hold even under concurrency.
+      // Note: for a same-user race, submissionRateLimiter (registered before this handler, at
+      // 1/10s) normally serializes concurrent attempts down to one admitted request before
+      // either reaches this line — so in practice this path is a backstop for when the rate
+      // limiter fails open (e.g. Redis unreachable, see rateLimit.ts's fail-open catch), not
+      // the primary mechanism that coalesces a double-click. Defense in depth, not dead code.
       if (isMongoDuplicateKeyError(err)) {
         const winner = await Submission.findOne({ userId, idempotencyKey }).lean();
         if (winner) {
