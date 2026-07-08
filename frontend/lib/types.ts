@@ -172,3 +172,34 @@ export interface VerdictClientEvent {
   submissionId: string;
   verdict: string;
 }
+
+// api/src/routes/hints.ts POST / — a discriminated union: the degraded path (LLM
+// timeout/outage, global quota exhausted) is a 200, not an error, per the "never a
+// 5xx, judging path unaffected" design.
+export interface HintAvailableResponse {
+  available: true;
+  level: 1 | 2 | 3;
+  hintText: string;
+  tokensUsed: number;
+  hintsRemainingToday: number;
+}
+export interface HintUnavailableResponse {
+  available: false;
+  message: string;
+}
+export type HintResponse = HintAvailableResponse | HintUnavailableResponse;
+
+// api/src/routes/problems.ts GET /:slug/hints
+export interface HintSummary {
+  level: 1 | 2 | 3;
+  hintText: string;
+}
+
+// Mirrors api/src/socket/types.ts HintClientEvent — a live-typing signal only, same
+// "REST is truth" discipline as VerdictClientEvent; the awaited POST /api/hints
+// response is what actually unlocks a level, not this stream.
+export interface HintClientEvent {
+  submissionId: string;
+  level: 1 | 2 | 3;
+  chunk?: string;
+}

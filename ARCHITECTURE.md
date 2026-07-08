@@ -38,7 +38,7 @@ CodeArena is an online judge and contest platform (Codeforces/LeetCode-style):
 | Database | MongoDB + Mongoose |
 | Coordination layer | Redis (queue, pub/sub, leaderboard, rate limits, cache) |
 | Real-time | Socket.io with Redis adapter |
-| LLM | Anthropic API (server-side only) |
+| LLM | Google Gemini API, free tier (server-side only) |
 | Editor | Monaco |
 
 ---
@@ -85,7 +85,8 @@ CodeArena is an online judge and contest platform (Codeforces/LeetCode-style):
          └─────────────────────┘
                                   ┌─────────────────┐
          API (hint endpoint) ────▶│  LLM Service     │
-                                  │  (Anthropic API) │
+                                  │ (Google Gemini   │
+                                  │  API, free tier) │
                                   └─────────────────┘
 ```
 
@@ -104,7 +105,7 @@ CodeArena is an online judge and contest platform (Codeforces/LeetCode-style):
 5. **Every external effect is idempotent or deduplicated.** Judging is idempotent
    (re-running a job produces the same verdict). Submission creation is deduplicated
    via idempotency keys.
-6. **Secrets live server-side only.** The Anthropic API key never appears in frontend
+6. **Secrets live server-side only.** The Gemini API key never appears in frontend
    code, git history, or logs. All secrets via environment variables; `.env.example`
    documents every variable per service, `.env` is gitignored.
 
@@ -306,20 +307,31 @@ Enumerate deliberately; each is a separate concept and a separate interview answ
 
 1. **Job queue (BullMQ)** — decouples accepting submissions from judging them.
    Absorbs contest-start bursts; workers scale on queue depth.
-2. **Pub/Sub** — the worker → socket-server bridge (channel `verdicts`), plus the
-   Socket.io Redis adapter's internal channels for multi-instance socket scaling.
-   Note: `verdicts` deliberately breaks the `{scope}:{key}` namespacing convention used
-   everywhere else in this section (`lb:`, `rl:`, `cache:`) — it predates that convention
-   and both the worker (publisher) and socket server (subscriber) already agree on the
-   literal name. Candidate for a `ch:verdicts` rename during the Phase 7 hardening pass,
-   updating both sides together — not worth a piecemeal rename mid-feature.
+2. **Pub/Sub** — the worker → socket-server bridge (channel `verdicts`), the API →
+   socket-server bridge for `ch:leaderboard` and `ch:hints` (contest scoring and hint
+   streaming respectively — both API-originated, unlike `verdicts` which the worker
+   publishes), plus the Socket.io Redis adapter's internal channels for multi-instance
+   socket scaling. Note: `verdicts` deliberately breaks the `{scope}:{key}` namespacing
+   convention used everywhere else in this section (`lb:`, `rl:`, `cache:`) — it
+   predates that convention and both the worker (publisher) and socket server
+   (subscriber) already agree on the literal name. Candidate for a `ch:verdicts` rename
+   during the Phase 7 hardening pass, updating both sides together — not worth a
+   piecemeal rename mid-feature. `ch:leaderboard` and `ch:hints` are new channels, so
+   they follow the `ch:*` convention from the start.
 3. **Live leaderboards** — `ZSET` per contest (`lb:{contestId}`).
    `ZINCRBY` on score events, `ZREVRANGE ... WITHSCORES` for reads, rank via `ZREVRANK`.
    O(log N) updates, zero DB reads on the hot path. TTL'd after contest end
    (final standings persisted to MongoDB by a finalization step).
 4. **Rate limiting** — sliding window counters:
    - submissions: `rl:sub:{userId}`
-   - hints: `rl:hint:{userId}:{problemId}` and a daily global per-user cap
+   - hints: `rl:hint:{userId}:{problemId}:{level}` (anti-double-click, generic
+     `rateLimit()` middleware); `rl:hint-daily:{userId}` (per-user daily cap);
+     `rl:hint-global` (per-minute cap shared by all users); `rl:hint-global-daily`
+     (shared daily cap — the actual binding constraint, since Google enforces the free
+     tier's daily quota per project, not per user; see §9). The three `rl:hint*`
+     variants beyond the first are refundable (a dedicated `quota.ts` module, not the
+     generic middleware — see §9) so a downstream failure never charges a user or the
+     app for a hint that was never delivered.
    - auth attempts: `rl:auth:{ip}`
 5. **Caching** — `cache:problem:{slug}` (rendered problem payloads, TTL ~5 min,
    invalidated on problem update) and `cache:hint:{problemId}:{level}:{failureSig}`
@@ -372,32 +384,120 @@ single Redis is a SPOF in the student deployment; production path is Sentinel/Cl
 ## 9. AI Hint System (LLM Integration)
 
 ### Product rules
-- Hints unlock only after a failed submission (`WA`/`TLE`/`RE`) for that problem.
+- Hints unlock only after a failed submission (`WA`/`TLE`/`RE`/`MLE`) for that problem.
+  (MLE was missing from the original list here — an oversight, not an intentional
+  exclusion: §5's verdict table treats it as an ordinary failure like WA/TLE/RE. `CE`
+  stays excluded — a compile error is a different failure class, out of scope.)
+- Unlock state is tracked per **(user, problem)**, not per submission — once a level is
+  revealed for a problem, it stays revealed regardless of which submission attempt
+  triggered it. Re-requesting an already-unlocked level serves the persisted hint again
+  at zero additional LLM cost, rather than erroring.
 - Three graduated levels, strictly sequential (must reveal L1 before requesting L2):
   - **L1 Nudge:** conceptual poke, no approach named.
   - **L2 Approach:** names the technique/direction, no code, no full algorithm.
   - **L3 Bug pinpoint:** identifies the likely bug location/nature in *their* code,
-    without providing corrected code.
-- A hint must NEVER include: full solution code, complete algorithms step-by-step,
-  or corrected versions of the user's code.
+    without stating the corrected expression, statement, or value that fixes it — the
+    student must derive the actual fix themselves.
+- A hint must NEVER include: full solution code, complete algorithms step-by-step, a
+  corrected version of the user's code, or (even at L3) the specific corrected
+  expression/statement/value that should replace the buggy one.
+
+### Provider (changed from the original Anthropic plan)
+The LLM provider is **Google's Gemini API on the free tier** (`@google/genai`, model
+`gemini-2.5-flash-lite`), not Anthropic — cost: zero, at the tradeoff described below.
+**Free-tier data-use note:** requests on this tier may be used by Google to improve its
+products; this is an accepted tradeoff for a $0 hint feature on a student project, not
+something to build around. The production-grade answer, if this ever needs to leave
+student-project scope, is the paid tier (a different data-use contract) — mentioned
+here once, not hidden.
+
+**Confirmed free-tier limit (load-bearing — do not assume a higher number):** a live
+`429` during Phase 6 testing confirmed Google's actual cap for
+`gemini-2.5-flash-lite` is `GenerateRequestsPerDayPerProjectPerModel-FreeTier: 20` —
+**20 requests per day, per Google Cloud project, shared across every user of the
+deployed app** — not a per-user limit, and nowhere near the ~1,000/day figure
+originally assumed when this phase was planned from public docs alone. This is why a
+**global** daily quota gate exists in addition to the per-user daily cap (see §7): a
+handful of users each well under any per-minute limit can still exhaust the whole
+day's budget for everyone within minutes. `gemini-2.5-flash`'s exact daily figure is
+unverified; check the project's own AI Studio dashboard before relying on it.
+**Free-tier `503`/timeout responses are expected, not a bug** — the model periodically
+returns `"UNAVAILABLE" ("high demand")` or fails to respond within the 8s cap; both are
+handled by the same graceful-degradation path described below, exactly like any other
+LLM error.
 
 ### Implementation
 - `POST /api/hints` `{ submissionId, level }` — server-side only path to the LLM.
+  `GET /api/problems/:slug/hints` returns every level already unlocked for that
+  (user, problem), for page-reload/reconnect recovery.
 - **Context sent to the model:** problem statement, the user's failing code, verdict,
-  failed test index (+ its input if small), and the requested level.
-- **System prompt** encodes the leveling rules and hard prohibitions above; it also
-  instructs the model to keep hints under ~120 words. Treat the prompt as code:
-  version it in the repo (`/api/src/services/hints/prompts.ts`), iterate with tests
-  on problems whose solutions are known, verifying non-leakage.
-- **Streaming:** stream the LLM response and forward chunks over the user's socket
-  (`hint:chunk` → `hint:done`); persist the full hint to MongoDB when complete.
-- **Cost & abuse controls (Redis):** per-user daily cap (e.g. 10), per-problem-per-level
-  cap, and **caching**: key = `problemId + level + failureSignature`, where
-  failureSignature = hash of (verdict + failedTestIndex + normalized code features).
-  Cache hit → serve stored hint, zero LLM cost. Log tokensUsed per call.
-- **Failure posture:** LLM API errors/timeouts (8s cap) degrade gracefully to a
-  friendly "hints are unavailable right now" — never block or fail the judging path;
-  the hint system is strictly additive.
+  failed test index (+ its input if ≤500 bytes), and the requested level — each piece
+  of untrusted, student-supplied content is wrapped in explicit tags
+  (`<problem_statement>`, `<user_code>`, `<failed_test_input>`) with an instruction to
+  treat their contents as data, never as instructions to follow (prompt-injection
+  hardening; a test-hint-leakage.ts case seeds an injection attempt in a code comment
+  and asserts it has no effect).
+- **System prompt** encodes the leveling rules and hard prohibitions above (including
+  the L3 corrected-expression restriction); it also instructs the model to keep hints
+  under ~120 words. Treated as code: versioned in the repo
+  (`api/src/hints/prompts.ts`, `HINT_PROMPT_VERSION`), iterated against known-solution
+  problems in `api/src/scripts/test-hint-leakage.ts` (manual for now — §13 already
+  earmarks hint-prompt-guard tests for Phase 7 CI).
+- **Streaming:** stream the Gemini response and forward chunks over Redis pub/sub
+  (`ch:leaderboard`-style — a new `ch:hints` channel, since the API process that calls
+  Gemini must not assume it shares a process with the socket server) to the user's
+  private room as `hint:chunk` → `hint:done`; persist the full hint to MongoDB only
+  once complete. The awaited `POST /api/hints` response is itself the correctness
+  fallback (mirrors §8's push=speed/pull=correctness split, just synchronous) — sockets
+  are a live-typing effect only, never the source of truth.
+- **Cost & abuse controls (Redis), four distinct gates, in order:**
+  1. `rl:hint:{userId}:{problemId}:{level}` — anti-double-click (1 req/3s).
+  2. `rl:hint-daily:{userId}` — per-user daily cap (**3/day**, deliberately small —
+     see below). Refundable (see below).
+  3. `rl:hint-global` — per-minute cap shared by all users, protects burst load.
+  4. `rl:hint-global-daily` — the real binding constraint: a shared daily cap of
+     **18** (well under the confirmed 20/day hard limit), refundable.
+  **The entire deployed app shares one 20-request daily Gemini budget, confirmed live
+  (see above) — this is the platform's actual daily hint capacity, not a per-user
+  allowance.** The per-user cap (3/day) exists so a handful of students can't burn
+  through that whole shared budget alone; the global daily gate (18/day) is the hard
+  backstop. Given how tight this budget is, the `failureSignature` cache below is
+  **load-bearing capacity management, not merely an optimization** — every cache hit
+  serves a hint at zero Gemini cost, which is what makes repeat/common failures (the
+  same bug pattern hit by multiple students) affordable at all under a 20/day ceiling.
+  Gates 3–4 are skipped entirely on a cache hit (zero Gemini calls made, so nothing to
+  protect) — only gate 2 applies on a cache hit, since it's a per-user fair-use control
+  unrelated to Gemini capacity. **Caching:** key =
+  `cache:hint:{problemId}:{level}:{failureSignature}`, where failureSignature = SHA-256
+  of (verdict + failedTestIndex + normalized code). Sharing a cache hit across
+  different users is deliberate even at L3 — the key is content-scoped, not
+  identity-scoped, and identical (verdict, test, code) genuinely produces an identical
+  valid diagnosis. Cache hit → serve stored hint, `tokensUsed: 0`. Every gate that
+  provisionally consumes quota before a later step fails (global gates exhausted, or
+  the Gemini call itself errors) **refunds** that consumption — implemented as a
+  dedicated `api/src/hints/quota.ts` module (sliding-window Redis sorted sets with a
+  token-based consume/refund pair) rather than the generic `rateLimit()` Express
+  middleware, which has no "undo" primitive.
+- **Failure posture:** Gemini errors/timeouts (8s end-to-end `AbortController` cap) and
+  exhausted global quota gates both degrade to a friendly `200 {available:false,
+  message:"hints are unavailable right now"}` — never a 5xx, never blocking or failing
+  the judging path; the hint system is strictly additive. **A real crash was found and
+  root-caused, not just papered over, during Phase 6 testing:** the `@google/genai`
+  SDK's internal fetch/stream teardown (undici) leaves an orphaned, unhandled promise
+  rejection when our own `AbortController` fires mid-stream — a gap in the SDK/undici's
+  own abort handling, not a bug in `generateHint`'s own try/catch (which already
+  handles the "public" rejection correctly; this is a second, separate promise the SDK
+  creates internally). Confirmed by reproduction that this does **not** surface via
+  `process.on('unhandledRejection', ...)` — Node's default unhandled-rejection mode
+  (`throw`, the default since Node 15) escalates it straight to `uncaughtException`
+  with `origin: 'unhandledRejection'`, bypassing the `unhandledRejection` event
+  entirely. The guard therefore lives on `uncaughtException` in `api/src/index.ts`,
+  narrowly scoped to this exact known condition (`origin === 'unhandledRejection' &&
+  err instanceof DOMException && err.name === 'AbortError'`) — anything else still
+  crashes the process on purpose and logs loudly first, since an *unknown*
+  uncaughtException leaves the process in a state that should be restarted, not kept
+  alive. Without this guard, the timing race would crash the whole API process,
+  taking judging down along with hints.
 
 ---
 
@@ -414,7 +514,18 @@ POST   /api/submissions              submit code (rate-limited, idempotent) → 
                                       being registered (see Phase 5)
 GET    /api/submissions/:id          status/verdict (polling fallback + history)
 GET    /api/problems/:slug/submissions   my submissions for a problem
-POST   /api/hints                    request hint level N for a submission
+POST   /api/hints                    { submissionId, level } → 201 { available:true,
+                                      level, hintText, tokensUsed, hintsRemainingToday }
+                                      on success; 200 { available:false, message } on
+                                      graceful degradation (LLM error/timeout, global
+                                      quota exhausted — never a 5xx); idempotent replay
+                                      of an already-unlocked level → 200 with the same
+                                      shape as success. Streams hint:chunk/hint:done
+                                      over the caller's private socket room as a live-
+                                      typing effect while this request is in flight —
+                                      this response is the source of truth regardless.
+GET    /api/problems/:slug/hints     every hint level already unlocked for the caller
+                                      on this problem — [{ level, hintText }, ...]
 GET    /api/contests                 lobby list, sorted by startAt
 POST   /api/contests/:id/register    requireAuth; only before startAt
 GET    /api/contests/:id             contest detail; problems: [] unless the phase is
@@ -505,11 +616,19 @@ leaderboard with Mongo-backed rebuild/finalization (api/src/contests/rebuild.ts)
 contest:{id} room socket broadcasts (leaderboard:update, contest:announcement),
 lazy finalization job, and frontend lobby/detail/leaderboard pages.
 
-Phase 6 — **AI hints (current):** prompt module + leveling, streaming over sockets,
-rate limits, caching, hint panel UI.
+Phase 6 — DONE: AI hints. Gemini-backed (`@google/genai`, `gemini-2.5-flash-lite`)
+graduated hint system (L1 nudge / L2 approach / L3 bug-pinpoint) with a versioned,
+prompt-injection-hardened system prompt (`api/src/hints/prompts.ts`), streaming over
+`ch:hints` → sockets as a live-typing effect with the REST response as source of
+truth, per-user + global (per-minute and per-day) refundable Redis quota gates
+(`api/src/hints/quota.ts`) sized against the confirmed real free-tier limit (20
+requests/day/project), content-addressed caching shared safely across users, a manual
+non-leakage test script (`api/src/scripts/test-hint-leakage.ts`), and a process-level
+`unhandledRejection` guard for a Gemini streaming/abort timing race found during
+testing.
 
-Phase 7 — Hardening + polish: metrics, CI, seed data, deploy, README with
-architecture diagram, demo script.
+Phase 7 — **Hardening + polish (current):** metrics, CI, seed data, deploy, README
+with architecture diagram, demo script.
 
 Each phase: implement → verify with explicit commands → commit → /clear session.
 The project owner reviews every diff and must be able to explain every decision.

@@ -4,6 +4,8 @@ import type {
   ContestDetailResponse,
   ContestListResponse,
   CreateSubmissionResponse,
+  HintResponse,
+  HintSummary,
   LeaderboardResponse,
   ProblemDetail,
   ProblemSummary,
@@ -146,4 +148,15 @@ export function registerForContest(id: string): Promise<RegisterContestResponse>
 
 export function getContestLeaderboard(id: string, offset = 0, limit = 50): Promise<LeaderboardResponse> {
   return apiFetch<LeaderboardResponse>(`/api/contests/${id}/leaderboard?offset=${offset}&limit=${limit}`);
+}
+
+export function requestHint(submissionId: string, level: 1 | 2 | 3): Promise<HintResponse> {
+  return apiFetch<HintResponse>('/api/hints', {
+    method: 'POST',
+    body: JSON.stringify({ submissionId, level }),
+  });
+}
+
+export function getProblemHints(slug: string): Promise<HintSummary[]> {
+  return apiFetch<HintSummary[]>(`/api/problems/${slug}/hints`);
 }

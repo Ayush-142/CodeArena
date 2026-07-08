@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import type { ContestAnnouncementEvent, LeaderboardClientEvent, VerdictClientEvent } from './types';
+import type { ContestAnnouncementEvent, HintClientEvent, LeaderboardClientEvent, VerdictClientEvent } from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -7,6 +7,9 @@ export interface ServerToClientEvents {
   verdict: (payload: VerdictClientEvent) => void;
   'leaderboard:update': (payload: LeaderboardClientEvent) => void;
   'contest:announcement': (payload: ContestAnnouncementEvent) => void;
+  'hint:chunk': (payload: HintClientEvent) => void;
+  'hint:done': (payload: { submissionId: string; level: 1 | 2 | 3 }) => void;
+  'hint:error': (payload: { submissionId: string; level: 1 | 2 | 3 }) => void;
 }
 
 // First client→server events in this app — contest-room membership isn't derivable from

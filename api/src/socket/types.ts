@@ -38,12 +38,37 @@ export interface LeaderboardClientEvent {
   finalized?: boolean;
 }
 
+/**
+ * Raw message shape published to Redis channel `ch:hints` by the API's hint route
+ * (api/src/hints/llm.ts), as each Gemini stream chunk arrives. Internal to the
+ * socket module only — userId is stripped before anything is emitted to a client.
+ */
+export interface HintPubSubMessage {
+  type: 'chunk' | 'done' | 'error';
+  userId: string;
+  submissionId: string;
+  level: 1 | 2 | 3;
+  chunk?: string;
+}
+
+/** Client-facing hint-stream event — a live-typing effect only. The awaited
+ * POST /api/hints response (not this stream) is the source of truth, same
+ * "REST is truth" philosophy as VerdictClientEvent. */
+export interface HintClientEvent {
+  submissionId: string;
+  level: 1 | 2 | 3;
+  chunk?: string;
+}
+
 // Socket.io generic type params (Server<ListenEvents, EmitEvents, ServerSideEvents, SocketData>)
 // — scoped to this module only, no `declare module 'socket.io'` global augmentation.
 export interface ServerToClientEvents {
   verdict: (payload: VerdictClientEvent) => void;
   'leaderboard:update': (payload: LeaderboardClientEvent) => void;
   'contest:announcement': (payload: { contestId: string; message: string }) => void;
+  'hint:chunk': (payload: HintClientEvent) => void;
+  'hint:done': (payload: { submissionId: string; level: 1 | 2 | 3 }) => void;
+  'hint:error': (payload: { submissionId: string; level: 1 | 2 | 3 }) => void;
 }
 
 // First client→server events in this codebase — contest-room membership isn't derivable

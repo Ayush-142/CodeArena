@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Problem } from '../models/Problem.js';
 import { Submission } from '../models/Submission.js';
+import { Hint } from '../models/Hint.js';
 import { requireAuth } from '../middleware/auth.js';
 import { AppError, asyncHandler } from '../middleware/errors.js';
 
@@ -33,6 +34,26 @@ problemsRouter.get(
       .select('status createdAt execTimeMs language')
       .lean();
     res.json(submissions);
+  }),
+);
+
+// "My hints for a problem" — unlock state is tracked per (userId, problemId), not
+// per-submission (see hints/quota.ts and routes/hints.ts), so this is scoped by
+// problem exactly like the neighboring /submissions route above, not by a specific
+// submission id.
+problemsRouter.get(
+  '/:slug/hints',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const problem = await Problem.findOne({ slug: req.params.slug }).select('_id').lean();
+    if (!problem) {
+      throw new AppError(404, 'NOT_FOUND', 'problem not found');
+    }
+    const hints = await Hint.find({ userId: req.user!.userId, problemId: problem._id })
+      .sort({ level: 1 })
+      .select('level hintText')
+      .lean();
+    res.json(hints);
   }),
 );
 

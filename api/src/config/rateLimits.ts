@@ -11,3 +11,9 @@ export const SUBMISSION_RATE_WINDOWS: RateWindow[] = [
 export const AUTH_RATE_WINDOWS: RateWindow[] = [
   { windowMs: 15 * 60_000, limit: 10 }, // 10 attempts / 15min / IP — slows brute force without punishing typo retries
 ];
+
+export const HINT_ANTI_SPAM_WINDOWS: RateWindow[] = [
+  { windowMs: 3_000, limit: 1 }, // 1 request / 3s / (user,problem,level) — blocks double-click only;
+  // the real per-level cap already falls out of sequential unlocking (max 3 ever), and the real
+  // daily cap is the dedicated refundable module in api/src/hints/quota.ts, not this middleware.
+];

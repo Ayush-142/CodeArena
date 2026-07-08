@@ -14,13 +14,16 @@ import type {
   VerdictPubSubMessage,
   LeaderboardClientEvent,
   LeaderboardPubSubMessage,
+  HintClientEvent,
+  HintPubSubMessage,
 } from './types.js';
 
 const VERDICTS_CHANNEL = 'verdicts';
-// New channel, so unlike the legacy unprefixed `verdicts` (a documented pre-convention
-// exception — see ARCHITECTURE.md §3/§7), this follows the general ch:*/scoped-key
+// New channels, so unlike the legacy unprefixed `verdicts` (a documented pre-convention
+// exception — see ARCHITECTURE.md §3/§7), these follow the general ch:*/scoped-key
 // namespacing convention from the start.
 const LEADERBOARD_CHANNEL = 'ch:leaderboard';
+const HINTS_CHANNEL = 'ch:hints';
 
 // Single entry point. Zero imports from routes/* — this module must stay movable to its own
 // process/workspace later by changing only the bootstrap that calls initSocket(httpServer).
@@ -155,6 +158,31 @@ export async function initSocket(
       });
     }
     console.log(`[socket] emitted leaderboard:update (contest=${parsed.contestId}) to room ${room}`);
+  });
+
+  // Same client, third subscription — hints are private, so this always emits to a
+  // user:{userId} room, never a contest room (unlike leaderboard updates above).
+  await verdictSubscriber.subscribe(HINTS_CHANNEL, (message) => {
+    let parsed: HintPubSubMessage;
+    try {
+      parsed = JSON.parse(message) as HintPubSubMessage;
+    } catch (err) {
+      console.error('[socket] failed to parse hints message', err, message);
+      return;
+    }
+    if (!parsed.userId) {
+      console.error('[socket] hints message missing userId, dropping', parsed);
+      return;
+    }
+    const room = `user:${parsed.userId}`;
+    if (parsed.type === 'chunk') {
+      const payload: HintClientEvent = { submissionId: parsed.submissionId, level: parsed.level, chunk: parsed.chunk };
+      io.to(room).emit('hint:chunk', payload);
+    } else if (parsed.type === 'done') {
+      io.to(room).emit('hint:done', { submissionId: parsed.submissionId, level: parsed.level });
+    } else {
+      io.to(room).emit('hint:error', { submissionId: parsed.submissionId, level: parsed.level });
+    }
   });
 
   return io;

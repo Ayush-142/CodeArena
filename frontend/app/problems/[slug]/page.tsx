@@ -7,11 +7,15 @@ import { useSocket } from '@/components/SocketProvider';
 import { MarkdownStatement } from '@/components/MarkdownStatement';
 import { MonacoEditorPanel } from '@/components/MonacoEditorPanel';
 import { VerdictBadge } from '@/components/VerdictBadge';
+import { HintPanel } from '@/components/HintPanel';
 import { SubmissionHistory } from '@/components/SubmissionHistory';
 import { ApiError, createSubmission, getProblem, getRetryAfterSeconds, getSubmission } from '@/lib/api';
 import type { ProblemDetail, SubmissionStatus, VerdictClientEvent } from '@/lib/types';
 
 const TERMINAL_STATUSES: SubmissionStatus[] = ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE'];
+// Mirrors api/src/routes/hints.ts ELIGIBLE_VERDICTS exactly — hints unlock only for
+// these; CE is a different failure class (nothing ran) and stays out of scope.
+const HINT_ELIGIBLE_STATUSES: SubmissionStatus[] = ['WA', 'TLE', 'RE', 'MLE'];
 
 interface SubmissionView {
   status: SubmissionStatus;
@@ -178,6 +182,9 @@ export default function ProblemSolvingPage() {
               execTimeMs={submissionView.execTimeMs}
             />
           </p>
+        ) : null}
+        {submissionView && currentSubmissionId && HINT_ELIGIBLE_STATUSES.includes(submissionView.status) ? (
+          <HintPanel submissionId={currentSubmissionId} problemSlug={slug} />
         ) : null}
       </div>
 

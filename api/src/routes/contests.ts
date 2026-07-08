@@ -10,9 +10,9 @@ import { unpackScore, rebuildRedisLeaderboard, tryFinalizeContest } from '../con
 
 export const contestsRouter = Router();
 
-type Phase = 'upcoming' | 'running' | 'ended';
+export type Phase = 'upcoming' | 'running' | 'ended';
 
-function computePhase(startAt: Date, endAt: Date, now: number): Phase {
+export function computePhase(startAt: Date, endAt: Date, now: number): Phase {
   if (now < startAt.getTime()) return 'upcoming';
   if (now <= endAt.getTime()) return 'running';
   return 'ended';
