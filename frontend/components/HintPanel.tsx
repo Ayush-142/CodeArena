@@ -76,7 +76,7 @@ export function HintPanel({ submissionId, problemSlug }: { submissionId: string;
   const nextLevel = LEVELS.find((l) => unlocked[l] === undefined);
 
   return (
-    <div className="mt-4 flex flex-col gap-3 border border-line bg-surface p-3">
+    <div className="mt-4 flex flex-col gap-3 rounded-lg border border-line bg-surface p-3">
       <h2 className="font-display font-bold text-ink">Hints</h2>
       {LEVELS.filter((l) => unlocked[l] !== undefined).map((l) => (
         <div key={l}>
@@ -104,7 +104,7 @@ export function HintPanel({ submissionId, problemSlug }: { submissionId: string;
       {nextLevel && streamingLevel === null ? (
         <button
           onClick={() => handleRequest(nextLevel)}
-          className="self-start border border-accent bg-accent/10 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-accent hover:bg-accent/20"
+          className="self-start rounded-md border border-accent bg-accent/10 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-accent hover:bg-accent/20"
         >
           Get Level {nextLevel} Hint ({LEVEL_LABELS[nextLevel]})
         </button>

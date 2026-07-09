@@ -13,14 +13,14 @@ export function LeaderboardCell({ cell }: { cell?: LeaderboardCellData }) {
     const label =
       cell.wrongAttempts > 0 ? `${cell.solvedAtMinutes} +${cell.wrongAttempts}` : `${cell.solvedAtMinutes}`;
     return (
-      <span className="inline-block border border-verdict-ac bg-verdict-ac/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-verdict-ac">
+      <span className="inline-block rounded-md border border-verdict-ac bg-verdict-ac/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-verdict-ac">
         {label}
       </span>
     );
   }
 
   return (
-    <span className="inline-block border border-verdict-wa bg-verdict-wa/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-verdict-wa">
+    <span className="inline-block rounded-md border border-verdict-wa bg-verdict-wa/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-verdict-wa">
       &minus;{cell.wrongAttempts}
     </span>
   );

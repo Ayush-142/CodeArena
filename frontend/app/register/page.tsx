@@ -49,7 +49,7 @@ function RegisterForm() {
         <label className="font-mono text-sm text-ink/70">
           Handle
           <input
-            className="mt-1 w-full border border-line bg-transparent p-2 font-body text-ink"
+            className="mt-1 w-full rounded-md border border-line bg-transparent p-2 font-body text-ink"
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
             required
@@ -59,7 +59,7 @@ function RegisterForm() {
           Email
           <input
             type="email"
-            className="mt-1 w-full border border-line bg-transparent p-2 font-body text-ink"
+            className="mt-1 w-full rounded-md border border-line bg-transparent p-2 font-body text-ink"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -69,7 +69,7 @@ function RegisterForm() {
           Password
           <input
             type="password"
-            className="mt-1 w-full border border-line bg-transparent p-2 font-body text-ink"
+            className="mt-1 w-full rounded-md border border-line bg-transparent p-2 font-body text-ink"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -80,7 +80,7 @@ function RegisterForm() {
         <button
           type="submit"
           disabled={submitting}
-          className="border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+          className="rounded-md border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
         >
           {submitting ? 'Registering…' : 'Register'}
         </button>

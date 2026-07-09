@@ -46,7 +46,7 @@ export function VerdictBadge({
   if (variant === 'chip') {
     return (
       <span
-        className={`inline-block border px-1.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide ${style.text} ${style.border} ${style.bg}`}
+        className={`inline-block rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide ${style.text} ${style.border} ${style.bg}`}
       >
         {label}
       </span>
@@ -55,10 +55,10 @@ export function VerdictBadge({
 
   return (
     <span
-      className={`inline-block rotate-[-2deg] border-2 p-[3px] shadow-stamp motion-safe:animate-stamp-in ${style.border} ${style.text}`}
+      className={`inline-block rotate-[-2deg] rounded-lg border-2 p-[3px] shadow-stamp motion-safe:animate-stamp-in ${style.border} ${style.text}`}
     >
       <span
-        className={`block border px-3 py-1 font-mono text-sm font-bold uppercase tracking-widest ${style.border} ${style.bg}`}
+        className={`block rounded-md border px-3 py-1 font-mono text-sm font-bold uppercase tracking-widest ${style.border} ${style.bg}`}
       >
         {label}
       </span>

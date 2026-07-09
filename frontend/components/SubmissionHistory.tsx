@@ -38,27 +38,29 @@ export function SubmissionHistory({ slug, refreshKey }: { slug: string; refreshK
   if (items.length === 0) return <EmptyState message="No submissions yet." />;
 
   return (
-    <table className="w-full border-collapse text-left font-mono text-sm text-ink">
-      <thead>
-        <tr className="border-b border-line text-ink/60">
-          <th className="py-1 pr-4 font-normal">Status</th>
-          <th className="py-1 pr-4 font-normal">When</th>
-          <th className="py-1 pr-4 font-normal">Time</th>
-          <th className="py-1 font-normal">Language</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item, i) => (
-          <tr key={item._id} className={`border-b border-line ${i % 2 === 1 ? 'bg-surface/40' : ''}`}>
-            <td className="py-1.5 pr-4">
-              <VerdictBadge status={item.status} execTimeMs={item.execTimeMs ?? undefined} variant="chip" />
-            </td>
-            <td className="py-1.5 pr-4">{new Date(item.createdAt).toLocaleString()}</td>
-            <td className="py-1.5 pr-4">{item.execTimeMs != null ? `${item.execTimeMs}ms` : '—'}</td>
-            <td className="py-1.5">{item.language}</td>
+    <div className="overflow-hidden rounded-lg border border-line">
+      <table className="w-full border-collapse text-left font-mono text-sm text-ink">
+        <thead>
+          <tr className="border-b border-line bg-surface text-ink/60">
+            <th className="py-1 pl-3 pr-4 font-normal">Status</th>
+            <th className="py-1 pr-4 font-normal">When</th>
+            <th className="py-1 pr-4 font-normal">Time</th>
+            <th className="py-1 pr-3 font-normal">Language</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {items.map((item, i) => (
+            <tr key={item._id} className={i % 2 === 1 ? 'bg-surface/40' : ''}>
+              <td className="py-1.5 pl-3 pr-4">
+                <VerdictBadge status={item.status} execTimeMs={item.execTimeMs ?? undefined} variant="chip" />
+              </td>
+              <td className="py-1.5 pr-4">{new Date(item.createdAt).toLocaleString()}</td>
+              <td className="py-1.5 pr-4">{item.execTimeMs != null ? `${item.execTimeMs}ms` : '—'}</td>
+              <td className="py-1.5 pr-3">{item.language}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

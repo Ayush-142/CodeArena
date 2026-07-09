@@ -20,7 +20,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Swatch({ name, className, hex }: { name: string; className: string; hex: string }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className={`h-16 w-full border border-line ${className}`} />
+      <div className={`h-16 w-full rounded-lg border border-line ${className}`} />
       <div className="font-mono text-xs text-ink">
         <div className="font-semibold">{name}</div>
         <div className="text-ink/60">{hex}</div>
@@ -55,7 +55,8 @@ export default function StyleguidePage() {
         <p className="mt-2 max-w-2xl font-body text-sm text-ink/70">
           &ldquo;Judge Slip&rdquo; direction — tokens, type, and every shared component state. This
           page ships to production as the living design-system reference; every later slice
-          inherits from it.
+          inherits from it. Every bordered box uses a rounded corner (<code>rounded-md</code> for
+          chips/inputs, <code>rounded-lg</code> for panels/cards/tables) — keep new boxes rounded too.
         </p>
       </div>
 
@@ -88,32 +89,32 @@ export default function StyleguidePage() {
 
       <Section title="Buttons & inputs">
         <div className="flex flex-wrap items-center gap-4">
-          <button className="border border-accent bg-accent/10 px-3 py-1.5 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20">
+          <button className="rounded-md border border-accent bg-accent/10 px-3 py-1.5 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20">
             Primary
           </button>
-          <button className="border border-line px-3 py-1.5 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink">
+          <button className="rounded-md border border-line px-3 py-1.5 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink">
             Secondary
           </button>
-          <button disabled className="border border-line px-3 py-1.5 font-mono text-sm uppercase tracking-wide text-ink/40">
+          <button disabled className="rounded-md border border-line px-3 py-1.5 font-mono text-sm uppercase tracking-wide text-ink/40">
             Disabled
           </button>
           <input
             placeholder="handle"
-            className="border border-line bg-transparent px-3 py-1.5 font-mono text-sm text-ink placeholder:text-ink/40"
+            className="rounded-md border border-line bg-transparent px-3 py-1.5 font-mono text-sm text-ink placeholder:text-ink/40"
           />
         </div>
       </Section>
 
       <Section title="Cards">
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="border border-line bg-surface p-4">
+          <div className="rounded-lg border border-line bg-surface p-4">
             <h3 className="font-display text-base font-bold text-ink">Panel title</h3>
             <p className="mt-1 font-body text-sm text-ink/70">
-              Flat, square-cornered surface — the base container used for problem cards, hint
-              panels, and contest cards.
+              Rounded-corner surface — the base container used for problem cards, hint panels,
+              and contest cards.
             </p>
           </div>
-          <div className="border-2 border-line bg-surface p-4 shadow-stamp">
+          <div className="rounded-lg border-2 border-line bg-surface p-4 shadow-stamp">
             <h3 className="font-display text-base font-bold text-ink">Emphasized panel</h3>
             <p className="mt-1 font-body text-sm text-ink/70">
               Doubled-border-adjacent treatment (thicker border + hard offset shadow) for panels
@@ -182,7 +183,7 @@ export default function StyleguidePage() {
           container so the page itself never scrolls sideways. This is the pattern
           ContestLeaderboard inherits.
         </p>
-        <div className="overflow-x-auto border border-line">
+        <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full border-collapse text-left font-mono text-sm">
             <thead>
               <tr className="border-b border-line bg-surface">
@@ -232,16 +233,16 @@ export default function StyleguidePage() {
               Skeleton (sized to content, no layout shift)
             </h3>
             <div className="flex flex-col gap-2">
-              <div className="h-4 w-3/4 animate-pulse motion-reduce:animate-none bg-line/40" />
-              <div className="h-4 w-1/2 animate-pulse motion-reduce:animate-none bg-line/40" />
-              <div className="h-24 w-full animate-pulse motion-reduce:animate-none bg-line/40" />
+              <div className="h-4 w-3/4 animate-pulse rounded-md motion-reduce:animate-none bg-line/40" />
+              <div className="h-4 w-1/2 animate-pulse rounded-md motion-reduce:animate-none bg-line/40" />
+              <div className="h-24 w-full animate-pulse rounded-lg motion-reduce:animate-none bg-line/40" />
             </div>
           </div>
           <div>
             <h3 className="mb-2 font-mono text-xs uppercase tracking-wide text-ink/50">
               Streaming hint text
             </h3>
-            <div className="border border-line bg-surface p-3">
+            <div className="rounded-lg border border-line bg-surface p-3">
               <p className="font-body text-sm text-ink">
                 {streamText}
                 <span className="ml-0.5 inline-block h-4 w-2 animate-pulse motion-reduce:animate-none bg-accent align-middle" />

@@ -32,7 +32,7 @@ export function Header() {
     <header className="flex items-center justify-between border-b border-line bg-canvas px-4 py-3">
       <div className="flex items-center gap-6">
         <Link href="/problems" className="flex items-center gap-2 font-display text-lg font-bold text-ink">
-          <span className="inline-block h-3 w-3 rotate-[-8deg] border-2 border-accent" aria-hidden="true" />
+          <span className="inline-block h-3 w-3 rotate-[-8deg] rounded-sm border-2 border-accent" aria-hidden="true" />
           CodeArena
         </Link>
         <NavLink href="/problems">Problems</NavLink>
@@ -44,7 +44,7 @@ export function Header() {
             {user.handle}
             <button
               onClick={handleLogout}
-              className="border border-line px-2 py-1 font-mono text-xs uppercase tracking-wide text-ink hover:border-ink"
+              className="rounded-md border border-line px-2 py-1 font-mono text-xs uppercase tracking-wide text-ink hover:border-ink"
             >
               Log out
             </button>
@@ -52,7 +52,7 @@ export function Header() {
         ) : status === 'unauthenticated' ? (
           <Link
             href="/login"
-            className="border border-accent bg-accent/10 px-2 py-1 font-mono text-xs uppercase tracking-wide text-accent hover:bg-accent/20"
+            className="rounded-md border border-accent bg-accent/10 px-2 py-1 font-mono text-xs uppercase tracking-wide text-accent hover:bg-accent/20"
           >
             Log in
           </Link>

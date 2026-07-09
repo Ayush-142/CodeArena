@@ -3,8 +3,8 @@ import Link from 'next/link';
 export default function NotFound() {
   return (
     <main className="mx-auto flex max-w-md flex-col items-start gap-3 p-10">
-      <span className="inline-block rotate-[-2deg] border-2 border-verdict-wa p-[3px] shadow-stamp">
-        <span className="block border border-verdict-wa bg-verdict-wa/10 px-3 py-1 font-mono text-sm font-bold uppercase tracking-widest text-verdict-wa">
+      <span className="inline-block rotate-[-2deg] rounded-lg border-2 border-verdict-wa p-[3px] shadow-stamp">
+        <span className="block rounded-md border border-verdict-wa bg-verdict-wa/10 px-3 py-1 font-mono text-sm font-bold uppercase tracking-widest text-verdict-wa">
           404
         </span>
       </span>

@@ -98,7 +98,7 @@ export function ContestLeaderboard({ contestId }: { contestId: string }) {
       {announcement ? <p className="font-mono text-sm text-verdict-ac">{announcement}</p> : null}
       {data.isFinalized ? <p className="font-mono text-xs uppercase tracking-wide text-ink/50">Final standings</p> : null}
 
-      <div className="overflow-x-auto border border-line">
+      <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full border-collapse text-left font-mono text-sm">
           <thead>
             <tr className="border-b border-line bg-surface">

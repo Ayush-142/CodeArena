@@ -20,7 +20,7 @@ export function RunConsole({ run, stalled }: { run: RunResponse; stalled: boolea
 
   if (run.compileError) {
     return (
-      <div className="border border-verdict-ce bg-verdict-ce/10 p-2">
+      <div className="rounded-lg border border-verdict-ce bg-verdict-ce/10 p-2">
         <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Compile error</p>
         <pre className="whitespace-pre-wrap font-mono text-xs text-ink">{run.compileError}</pre>
       </div>
@@ -39,13 +39,13 @@ export function RunConsole({ run, stalled }: { run: RunResponse; stalled: boolea
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Expected</p>
-                <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-xs text-ink">
+                <pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface p-2 font-mono text-xs text-ink">
                   {sample.expectedOutput}
                 </pre>
               </div>
               <div>
                 <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Actual</p>
-                <pre className="whitespace-pre-wrap border border-verdict-wa bg-verdict-wa/10 p-2 font-mono text-xs text-ink">
+                <pre className="whitespace-pre-wrap rounded-lg border border-verdict-wa bg-verdict-wa/10 p-2 font-mono text-xs text-ink">
                   {sample.actualOutput}
                 </pre>
               </div>

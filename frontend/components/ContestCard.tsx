@@ -12,7 +12,7 @@ export function ContestCard({ contest, serverTime }: { contest: ContestSummary; 
   const phase = computePhase(contest.startAt, contest.endAt, serverTime);
 
   return (
-    <li className="border border-line p-3 hover:border-ink">
+    <li className="rounded-lg border border-line p-3 hover:border-ink">
       <Link href={`/contests/${contest._id}`} className="font-display font-bold text-ink underline">
         {contest.title}
       </Link>

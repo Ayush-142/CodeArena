@@ -3,8 +3,8 @@
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <main className="mx-auto flex max-w-md flex-col items-start gap-3 p-10">
-      <span className="inline-block rotate-[-2deg] border-2 border-verdict-wa p-[3px] shadow-stamp">
-        <span className="block border border-verdict-wa bg-verdict-wa/10 px-3 py-1 font-mono text-sm font-bold uppercase tracking-widest text-verdict-wa">
+      <span className="inline-block rotate-[-2deg] rounded-lg border-2 border-verdict-wa p-[3px] shadow-stamp">
+        <span className="block rounded-md border border-verdict-wa bg-verdict-wa/10 px-3 py-1 font-mono text-sm font-bold uppercase tracking-widest text-verdict-wa">
           Error
         </span>
       </span>
@@ -14,7 +14,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
       </p>
       <button
         onClick={reset}
-        className="border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20"
+        className="rounded-md border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20"
       >
         Try again
       </button>
