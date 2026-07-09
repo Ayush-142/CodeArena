@@ -1,5 +1,15 @@
 import { Schema, model, InferSchemaType } from 'mongoose';
 
+const finalStandingCellSchema = new Schema(
+  {
+    problemId: { type: Schema.Types.ObjectId, ref: 'Problem', required: true },
+    solved: { type: Boolean, required: true },
+    solvedAtMinutes: { type: Number }, // present only when solved
+    wrongAttempts: { type: Number, required: true, default: 0 },
+  },
+  { _id: false },
+);
+
 const finalStandingRowSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -7,6 +17,9 @@ const finalStandingRowSchema = new Schema(
     solvedCount: { type: Number, required: true },
     penaltyMinutes: { type: Number, required: true },
     rank: { type: Number, required: true },
+    // Absent (not just empty) on rows finalized before this field existed — see
+    // backfillFinalStandingsCells in contests/rebuild.ts for the on-read migration.
+    cells: { type: [finalStandingCellSchema], default: [] },
   },
   { _id: false },
 );

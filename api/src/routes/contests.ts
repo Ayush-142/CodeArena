@@ -6,7 +6,13 @@ import { User } from '../models/User.js';
 import { requireAuth } from '../middleware/auth.js';
 import { AppError, asyncHandler } from '../middleware/errors.js';
 import { redisClient } from '../redis/client.js';
-import { unpackScore, rebuildRedisLeaderboard, tryFinalizeContest } from '../contests/rebuild.js';
+import {
+  unpackScore,
+  rebuildRedisLeaderboard,
+  tryFinalizeContest,
+  backfillFinalStandingsCells,
+  computeUserStandingsCells,
+} from '../contests/rebuild.js';
 
 export const contestsRouter = Router();
 
@@ -19,6 +25,15 @@ export function computePhase(startAt: Date, endAt: Date, now: number): Phase {
 }
 
 const PROBLEM_DETAIL_FIELDS = 'slug title statementMd difficulty tags timeLimitMs memoryLimitMb samples';
+
+// A-Z by contest.problemIds order; falls back to a numeric label past 26 problems
+// (not expected in practice, but avoids an undefined label rather than guarding against it).
+function buildProblemColumns(problemIds: { toString(): string }[]): { problemId: string; label: string }[] {
+  return problemIds.map((id, i) => ({
+    problemId: id.toString(),
+    label: i < 26 ? String.fromCharCode(65 + i) : `P${i + 1}`,
+  }));
+}
 
 contestsRouter.get(
   '/',
@@ -155,20 +170,35 @@ contestsRouter.get(
       }
     }
 
+    const problems = buildProblemColumns(contest!.problemIds);
+
     if (contest!.isFinalized) {
-      const standings = contest!.finalStandings;
+      let standings = contest!.finalStandings;
+      // Legacy rows finalized before per-problem cells shipped lack `cells` entirely
+      // (not just an empty array) — backfill once, on first read, then serve the
+      // backfilled rows for this request too instead of a second DB round trip.
+      if (standings.length > 0 && (standings[0] as { cells?: unknown }).cells === undefined) {
+        standings = (await backfillFinalStandingsCells(id)) as unknown as typeof standings;
+      }
       const rows = standings.slice(offset, offset + limit).map((s) => ({
         rank: s.rank,
         userId: s.userId.toString(),
         handle: s.handle,
         solvedCount: s.solvedCount,
         penaltyMinutes: s.penaltyMinutes,
+        cells: (s.cells ?? []).map((c) => ({
+          problemId: c.problemId.toString(),
+          solved: c.solved,
+          solvedAtMinutes: c.solvedAtMinutes,
+          wrongAttempts: c.wrongAttempts,
+        })),
       }));
       const mine = userId ? standings.find((s) => s.userId.toString() === userId) : undefined;
       res.json({
         serverTime: now,
         isFinalized: true,
         total: standings.length,
+        problems,
         rows,
         me: mine
           ? { rank: mine.rank, solvedCount: mine.solvedCount, penaltyMinutes: mine.penaltyMinutes }
@@ -190,6 +220,9 @@ contestsRouter.get(
     const userIds = entries.map((e) => String(e.value));
     const users = await User.find({ _id: { $in: userIds } }).select('handle').lean();
     const handleById = new Map(users.map((u) => [u._id.toString(), u.handle]));
+    // No `cells` here — a live row's per-problem breakdown is a separate, bounded,
+    // click-triggered fetch (GET /:id/leaderboard/:userId below), not part of this
+    // hot path.
     const rows = entries.map((e, i) => {
       const { solvedCount, penaltyMinutes } = unpackScore(e.score);
       return {
@@ -211,6 +244,48 @@ contestsRouter.get(
       }
     }
 
-    res.json({ serverTime: now, isFinalized: false, total, rows, me });
+    res.json({ serverTime: now, isFinalized: false, total, problems, rows, me });
+  }),
+);
+
+contestsRouter.get(
+  '/:id/leaderboard/:userId',
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const userId = String(req.params.userId);
+    if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(userId)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'invalid id');
+    }
+
+    const contest = await Contest.findById(id).lean();
+    if (!contest) {
+      throw new AppError(404, 'NOT_FOUND', 'contest not found');
+    }
+    if (Date.now() < contest.startAt.getTime()) {
+      throw new AppError(400, 'CONTEST_NOT_STARTED', 'this contest has not started yet');
+    }
+
+    // Finalized contests already embed cells inline in finalStandings (see the main
+    // leaderboard route above) — this path is only meant for live-contest row
+    // expansion, but answers defensively rather than assuming the caller checked.
+    if (contest.isFinalized) {
+      let standings = contest.finalStandings;
+      if (standings.length > 0 && (standings[0] as { cells?: unknown }).cells === undefined) {
+        standings = (await backfillFinalStandingsCells(id)) as unknown as typeof standings;
+      }
+      const mine = standings.find((s) => s.userId.toString() === userId);
+      res.json({
+        cells: (mine?.cells ?? []).map((c) => ({
+          problemId: c.problemId.toString(),
+          solved: c.solved,
+          solvedAtMinutes: c.solvedAtMinutes,
+          wrongAttempts: c.wrongAttempts,
+        })),
+      });
+      return;
+    }
+
+    const cells = await computeUserStandingsCells(id, userId, contest.endAt);
+    res.json({ cells });
   }),
 );

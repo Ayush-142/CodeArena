@@ -208,7 +208,20 @@ Indexes: `{userId, problemId, createdAt}`, `{contestId, status, createdAt}`,
   registeredUserIds: [ref],           // acceptable embed at student scale; note the
                                       // scaling answer: move to a registrations
                                       // collection beyond ~10k users per contest
-  isPublished, createdAt, updatedAt }
+  isFinalized,                        // flips true on lazy finalization (§7); contest
+                                      // problems flip their OWN isPublished true at the
+                                      // same time (a per-Problem field, not a contest one)
+  finalStandings: [{                  // embedded, written once by finalization; empty
+                                      // array until then
+    userId, handle,                   // handle denormalized so rendering needs no join
+    solvedCount, penaltyMinutes, rank,
+    cells: [{                         // per-problem ICPC breakdown; absent (not just
+                                      // empty) on rows finalized before this field
+                                      // existed — see the on-read backfill in §7
+      problemId, solved, solvedAtMinutes?, wrongAttempts
+    }]
+  }],
+  createdAt, updatedAt }
 ```
 
 ### hints
@@ -321,7 +334,14 @@ Enumerate deliberately; each is a separate concept and a separate interview answ
 3. **Live leaderboards** — `ZSET` per contest (`lb:{contestId}`).
    `ZINCRBY` on score events, `ZREVRANGE ... WITHSCORES` for reads, rank via `ZREVRANK`.
    O(log N) updates, zero DB reads on the hot path. TTL'd after contest end
-   (final standings persisted to MongoDB by a finalization step).
+   (final standings persisted to MongoDB by a finalization step). The ZSET score is
+   still a single packed scalar per user (solvedCount/penaltyMinutes only) — it has no
+   per-problem structure. `GET /:id/leaderboard/:userId` (§10) is a separate, bounded,
+   click-triggered read of a single user's submission history (indexed point query on
+   the existing `{contestId, userId, problemId, createdAt}` index) used to expand a
+   live leaderboard row's ICPC per-problem cells; it is not part of this scoring hot
+   path and does not weaken the "zero DB reads on the hot path" property above, which
+   still describes the `ZINCRBY` update on every AC.
 4. **Rate limiting** — sliding window counters:
    - submissions: `rl:sub:{userId}`
    - hints: `rl:hint:{userId}:{problemId}:{level}` (anti-double-click, generic
@@ -531,7 +551,13 @@ POST   /api/contests/:id/register    requireAuth; only before startAt
 GET    /api/contests/:id             contest detail; problems: [] unless the phase is
                                       running (+ caller registered) or ended
 GET    /api/contests/:id/leaderboard paginated standings (Redis-backed live, Mongo-backed
-                                      once finalized); ?offset=&limit=
+                                      once finalized); ?offset=&limit=; includes a top-level
+                                      `problems` column list (A/B/C.. labels) and, on
+                                      finalized rows only, an inline per-problem `cells`
+                                      breakdown
+GET    /api/contests/:id/leaderboard/:userId
+                                      per-problem ICPC cells for one user — live contests
+                                      only (finalized rows already embed cells inline above)
 --- admin (role-gated) ---
 POST/PUT /api/admin/problems         author problems, upload test cases
 POST   /api/admin/contests           requireAuth + requireAdmin

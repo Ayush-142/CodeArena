@@ -7,6 +7,7 @@ import type {
   HintResponse,
   HintSummary,
   LeaderboardResponse,
+  LeaderboardUserCellsResponse,
   ProblemDetail,
   ProblemSummary,
   RegisterContestResponse,
@@ -148,6 +149,14 @@ export function registerForContest(id: string): Promise<RegisterContestResponse>
 
 export function getContestLeaderboard(id: string, offset = 0, limit = 50): Promise<LeaderboardResponse> {
   return apiFetch<LeaderboardResponse>(`/api/contests/${id}/leaderboard?offset=${offset}&limit=${limit}`);
+}
+
+// Live-contest row expansion only; finalized rows already embed `cells` inline.
+export function getContestLeaderboardUserCells(
+  contestId: string,
+  userId: string,
+): Promise<LeaderboardUserCellsResponse> {
+  return apiFetch<LeaderboardUserCellsResponse>(`/api/contests/${contestId}/leaderboard/${userId}`);
 }
 
 export function requestHint(submissionId: string, level: 1 | 2 | 3): Promise<HintResponse> {

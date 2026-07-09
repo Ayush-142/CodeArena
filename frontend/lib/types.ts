@@ -111,6 +111,23 @@ export interface RegisterContestResponse {
   registered: boolean;
 }
 
+// api/src/routes/contests.ts GET /:id/leaderboard — one column per contest problem,
+// in contest.problemIds order, labeled A/B/C.. for the standings grid header.
+export interface LeaderboardProblemColumn {
+  problemId: string;
+  label: string;
+}
+
+// ICPC-style per-problem cell: solved (with solve time + any wrong attempts before
+// it), attempted-but-unsolved (wrongAttempts > 0, solved: false), or the problem is
+// simply absent from a row's `cells` (untouched — render empty).
+export interface LeaderboardCell {
+  problemId: string;
+  solved: boolean;
+  solvedAtMinutes?: number;
+  wrongAttempts: number;
+}
+
 // api/src/routes/contests.ts GET /:id/leaderboard
 export interface LeaderboardRow {
   rank: number;
@@ -118,8 +135,16 @@ export interface LeaderboardRow {
   handle: string;
   solvedCount: number;
   penaltyMinutes: number;
+  // Present (possibly empty) when isFinalized; absent on live rows until fetched via
+  // getContestLeaderboardUserCells (GET /:id/leaderboard/:userId).
+  cells?: LeaderboardCell[];
 }
 
+// Deliberately has no userId/handle/cells — see the "me" row design note in the UI
+// redesign plan: the current user's own row, when present in `rows[]`, is rendered
+// identically to any other row (same inline-cells-if-finalized /
+// click-to-expand-if-live behavior). This summary line only covers the case where
+// the user's rank falls outside the current page.
 export interface LeaderboardMeRow {
   rank: number;
   solvedCount: number;
@@ -130,8 +155,16 @@ export interface LeaderboardResponse {
   serverTime: number;
   isFinalized: boolean;
   total: number;
+  problems: LeaderboardProblemColumn[];
   rows: LeaderboardRow[];
   me: LeaderboardMeRow | null;
+}
+
+// api/src/routes/contests.ts GET /:id/leaderboard/:userId — live-contest, single-user
+// per-problem breakdown; never called for finalized contests (their rows already
+// embed `cells`).
+export interface LeaderboardUserCellsResponse {
+  cells: LeaderboardCell[];
 }
 
 // Mirrors api/src/socket/types.ts LeaderboardClientEvent — a "go refetch" signal only,
