@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 import { ApiError } from '@/lib/api';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 export default function RegisterPage() {
   return (
@@ -15,6 +17,7 @@ export default function RegisterPage() {
 }
 
 function RegisterForm() {
+  useDocumentTitle('Register');
   const { register } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -41,45 +44,52 @@ function RegisterForm() {
 
   return (
     <main className="mx-auto max-w-sm p-4">
-      <h1 className="mb-4 text-xl font-semibold">Register</h1>
+      <h1 className="mb-4 font-display text-xl font-bold text-ink">Register</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <label>
+        <label className="font-mono text-sm text-ink/70">
           Handle
           <input
-            className="mt-1 w-full border border-slate-600 bg-transparent p-2"
+            className="mt-1 w-full border border-line bg-transparent p-2 font-body text-ink"
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
             required
           />
         </label>
-        <label>
+        <label className="font-mono text-sm text-ink/70">
           Email
           <input
             type="email"
-            className="mt-1 w-full border border-slate-600 bg-transparent p-2"
+            className="mt-1 w-full border border-line bg-transparent p-2 font-body text-ink"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
         </label>
-        <label>
+        <label className="font-mono text-sm text-ink/70">
           Password
           <input
             type="password"
-            className="mt-1 w-full border border-slate-600 bg-transparent p-2"
+            className="mt-1 w-full border border-line bg-transparent p-2 font-body text-ink"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
           />
         </label>
-        {error ? <p className="text-red-400">{error}</p> : null}
-        <button type="submit" disabled={submitting} className="border border-slate-600 p-2">
+        {error ? <ErrorState message={error} /> : null}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+        >
           {submitting ? 'Registering…' : 'Register'}
         </button>
       </form>
-      <p className="mt-4">
-        Already have an account? <Link href="/login" className="underline">Log in</Link>
+      <p className="mt-4 font-body text-sm text-ink/70">
+        Already have an account?{' '}
+        <Link href="/login" className="text-accent underline">
+          Log in
+        </Link>
       </p>
     </main>
   );
