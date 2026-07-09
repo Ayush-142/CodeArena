@@ -1,13 +1,16 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'CodeArena' };
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-10">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-4xl font-semibold mb-4">CodeArena</h1>
-        <p className="text-lg text-slate-300">
-          An online judge platform.{' '}
-          <Link href="/problems" className="underline">
+    <main className="p-10">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="font-display text-4xl font-bold text-ink">CodeArena</h1>
+        <p className="mt-4 font-body text-lg text-ink/70">
+          A competitive-programming judge.{' '}
+          <Link href="/problems" className="text-accent underline">
             Browse problems
           </Link>
           .
