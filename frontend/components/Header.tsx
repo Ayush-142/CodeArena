@@ -30,13 +30,15 @@ export function Header() {
 
   return (
     <header className="flex items-center justify-between border-b border-line bg-canvas px-4 py-3">
-      <Link href="/problems" className="flex items-center gap-2 font-display text-lg font-bold text-ink">
-        <span className="inline-block h-3 w-3 rotate-[-8deg] border-2 border-accent" aria-hidden="true" />
-        CodeArena
-      </Link>
       <div className="flex items-center gap-6">
+        <Link href="/problems" className="flex items-center gap-2 font-display text-lg font-bold text-ink">
+          <span className="inline-block h-3 w-3 rotate-[-8deg] border-2 border-accent" aria-hidden="true" />
+          CodeArena
+        </Link>
         <NavLink href="/problems">Problems</NavLink>
         <NavLink href="/contests">Contests</NavLink>
+      </div>
+      <div className="flex items-center gap-3">
         {status === 'authenticated' && user ? (
           <span className="flex items-center gap-3 font-mono text-sm text-ink/70">
             {user.handle}
