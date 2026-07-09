@@ -52,7 +52,9 @@ export default function ProblemsPage() {
           {problems.map((p, i) => (
             <li
               key={p._id}
-              className="flex items-center justify-between gap-4 rounded-lg border border-line px-4 py-3 hover:border-ink"
+              className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-3 ${
+                p.solved ? 'border-verdict-ac bg-verdict-ac/10' : 'border-line hover:border-ink'
+              }`}
             >
               <div className="flex items-center gap-3">
                 <span className="font-mono text-sm text-ink/40">{i + 1}</span>

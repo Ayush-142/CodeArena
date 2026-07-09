@@ -9,11 +9,21 @@ export const problemsRouter = Router();
 
 problemsRouter.get(
   '/',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const problems = await Problem.find({ isPublished: true })
       .select('title slug difficulty tags')
       .lean();
-    res.json(problems);
+
+    // attachUser runs globally (see api/src/index.ts) even on routes without requireAuth, so
+    // req.user is populated whenever a valid cookie is present. Anonymous requests just get
+    // solved:false on every problem rather than a differently-shaped response.
+    let solvedIds = new Set<string>();
+    if (req.user) {
+      const solved = await Submission.distinct('problemId', { userId: req.user.userId, status: 'AC' });
+      solvedIds = new Set(solved.map((id) => id.toString()));
+    }
+
+    res.json(problems.map((p) => ({ ...p, solved: solvedIds.has(p._id.toString()) })));
   }),
 );
 

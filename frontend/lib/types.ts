@@ -17,6 +17,9 @@ export interface ProblemSummary {
   slug: string;
   difficulty: 'easy' | 'medium' | 'hard';
   tags: string[];
+  // true if the caller has at least one AC submission for this problem; always false when
+  // unauthenticated (never omitted — same shape either way).
+  solved: boolean;
 }
 
 export interface ProblemSample {
