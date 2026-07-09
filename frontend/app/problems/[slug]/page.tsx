@@ -23,6 +23,12 @@ const HINT_ELIGIBLE_STATUSES: SubmissionStatus[] = ['WA', 'TLE', 'RE', 'MLE'];
 
 type LeftTab = 'description' | 'submissions';
 
+const DIFFICULTY_STYLES: Record<ProblemDetail['difficulty'], string> = {
+  easy: 'border-verdict-ac text-verdict-ac',
+  medium: 'border-verdict-tle text-verdict-tle',
+  hard: 'border-verdict-wa text-verdict-wa',
+};
+
 interface SubmissionView {
   status: SubmissionStatus;
   failedTestIndex?: number;
@@ -186,9 +192,17 @@ export default function ProblemSolvingPage() {
     <main className="flex flex-1 flex-col gap-4 p-4">
       <div>
         <h1 className="font-display text-xl font-bold text-ink">{problem.title}</h1>
-        <p className="font-mono text-sm text-ink/60">
-          {problem.difficulty} · time limit {problem.timeLimitMs}ms · memory limit {problem.memoryLimitMb}MB
-        </p>
+        <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
+          <span className={`rounded-md border px-2 py-1 uppercase ${DIFFICULTY_STYLES[problem.difficulty]}`}>
+            {problem.difficulty}
+          </span>
+          <span className="rounded-md border border-line px-2 py-1 text-ink/70">
+            time limit {problem.timeLimitMs}ms
+          </span>
+          <span className="rounded-md border border-line px-2 py-1 text-ink/70">
+            memory limit {problem.memoryLimitMb}MB
+          </span>
+        </div>
       </div>
 
       <ResizableSplit
@@ -212,12 +226,18 @@ export default function ProblemSolvingPage() {
                   <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
                   {problem.samples.map((sample, i) => (
                     <div key={i} className="mb-2 grid grid-cols-2 gap-2">
-                      <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
-                        {sample.input}
-                      </pre>
-                      <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
-                        {sample.output}
-                      </pre>
+                      <div>
+                        <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Input</p>
+                        <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                          {sample.input}
+                        </pre>
+                      </div>
+                      <div>
+                        <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Output</p>
+                        <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                          {sample.output}
+                        </pre>
+                      </div>
                     </div>
                   ))}
                 </div>
