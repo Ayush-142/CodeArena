@@ -60,6 +60,23 @@ export interface HintClientEvent {
   chunk?: string;
 }
 
+/**
+ * Raw message shape published to Redis channel `ch:run` by the worker's `runs` queue
+ * processor, on both success and the `'failed'` event path. Internal to the socket module
+ * only — userId is stripped before anything is emitted to a client.
+ */
+export interface RunPubSubMessage {
+  runId: string;
+  userId: string;
+}
+
+/** Client-facing run-result notification — a "go refetch REST" signal only, same
+ * "REST is truth" philosophy as VerdictClientEvent. GET /api/run/:runId is the source
+ * of truth; this event never carries the actual result payload. */
+export interface RunClientEvent {
+  runId: string;
+}
+
 // Socket.io generic type params (Server<ListenEvents, EmitEvents, ServerSideEvents, SocketData>)
 // — scoped to this module only, no `declare module 'socket.io'` global augmentation.
 export interface ServerToClientEvents {
@@ -69,6 +86,7 @@ export interface ServerToClientEvents {
   'hint:chunk': (payload: HintClientEvent) => void;
   'hint:done': (payload: { submissionId: string; level: 1 | 2 | 3 }) => void;
   'hint:error': (payload: { submissionId: string; level: 1 | 2 | 3 }) => void;
+  'run:result': (payload: RunClientEvent) => void;
 }
 
 // First client→server events in this codebase — contest-room membership isn't derivable

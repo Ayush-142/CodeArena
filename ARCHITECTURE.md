@@ -284,6 +284,53 @@ Kept for auditability, cost tracking, and cache warm-up.
 | RE | non-zero exit / crash | process exit code |
 | CE | compilation failed | compile step exit code |
 
+### Run on samples (non-judging execution path)
+
+A `POST /api/run` lets a user execute code against a problem's public `samples` only — never
+the private `testcases` — through the exact same sandbox primitives (`compileCode`/`runTest`) as
+real judging, with no sandbox flag changes. It exists so a wrong answer is debuggable (actual vs.
+expected stdout) without spending a real submission.
+
+- **Separate BullMQ queue (`runs`), not a job-name branch in `submissions`** — a burst of Run
+  requests must never delay real judging, or vice versa.
+- **No `Submission` document is ever created.** This is what makes Run structurally incapable of
+  appearing in submission history, triggering contest scoring, or unlocking hints — there is
+  nothing to filter out of a history query, and the `runs` queue's worker callback has no
+  reference to `scoreContestSubmission` anywhere in its code path.
+- **Deviation from the lifecycle's "Queue" step (§5, step 2), named explicitly**: that step
+  states job payloads carry only `submissionId`, and workers re-read everything else from
+  MongoDB. The `runs` queue's job payload instead carries `code`/`language` inline (`{ runId,
+  userId, problemId, code, language }`), because there is no persisted document for the worker to
+  re-read from — a run is never written to Mongo at all. This is a scoped, named exception for
+  exactly that reason, not a precedent for loosening the principle elsewhere.
+- **All samples run, no first-failure short-circuit** — unlike `judge()`, which returns on the
+  first failing test, the Run path (`worker/src/run.ts`'s `runSamples()`) runs every sample so the
+  caller sees every outcome. Same `runTest(..., { timeLimitMs, memoryLimitMb })` call as judging,
+  so per-sample limits are identical to judging by construction.
+- **Output truncation**: the captured stdout is sliced to 4096 characters before being returned
+  — a post-hoc slice on the already-captured buffer, not a change to `sandbox.ts`'s (separately
+  pre-existing, unbounded) capture behavior.
+- **Ephemeral storage, not Mongo**: a `run:{runId}` key in Redis (`SET ... EX 600`, refreshed on
+  every write: `queued` → `running` → `done`/`failed`), mirroring the `rl:*`/`rl:hint-daily:*`
+  self-expiring-key convention already used for rate limits/quotas, extended from "counter" to
+  "small JSON result blob." The stored value includes the owning `userId`; `GET /api/run/:runId`
+  404s (not 403s) on any mismatch, same anti-enumeration posture as `GET /api/submissions/:id`.
+  A `runId` is a plain `crypto.randomUUID()`, never an ObjectId.
+- **Delivery** follows §8's existing pull-correctness posture exactly: `POST /api/run` returns
+  `202 { runId }` immediately; a new Pub/Sub channel `ch:run` (message `{ runId, userId }`) drives
+  a `run:result` socket event (payload `{ runId }` only) to room `user:{userId}` — a "go refetch"
+  nudge, not the result itself. `GET /api/run/:runId` is the actual source of truth.
+- **Failure handling**: the `runs` `Worker` uses BullMQ's default `attempts:1` (no retry) — a run
+  is meant to fail fast and visibly; a human re-click is the retry mechanism, not the queue. Its
+  `'failed'` event handler writes `{ status: 'failed' }` to `run:{runId}` so a client polling
+  never hangs on `running` until the TTL silently expires.
+- **Rate limit**: `rl:run:{userId}`, `1/3s + 60/hour` — more generous than submissions' `1/10s +
+  30/hour` since Run only executes the small public sample set. No idempotency key backs Run.
+- **Contest interaction**: Run is allowed during a running contest (samples are already public in
+  the statement) and resolves the problem through the same gating as submissions
+  (`api/src/contests/resolveGatedProblem.ts`, extracted out of `submissions.ts` so the two routes
+  can't drift). It never scores, per the "no Submission document" point above.
+
 ---
 
 ## 6. Sandbox Security Model (non-negotiable)
@@ -320,17 +367,16 @@ Enumerate deliberately; each is a separate concept and a separate interview answ
 
 1. **Job queue (BullMQ)** — decouples accepting submissions from judging them.
    Absorbs contest-start bursts; workers scale on queue depth.
-2. **Pub/Sub** — the worker → socket-server bridge (channel `verdicts`), the API →
-   socket-server bridge for `ch:leaderboard` and `ch:hints` (contest scoring and hint
-   streaming respectively — both API-originated, unlike `verdicts` which the worker
-   publishes), plus the Socket.io Redis adapter's internal channels for multi-instance
-   socket scaling. Note: `verdicts` deliberately breaks the `{scope}:{key}` namespacing
-   convention used everywhere else in this section (`lb:`, `rl:`, `cache:`) — it
-   predates that convention and both the worker (publisher) and socket server
-   (subscriber) already agree on the literal name. Candidate for a `ch:verdicts` rename
-   during the Phase 7 hardening pass, updating both sides together — not worth a
-   piecemeal rename mid-feature. `ch:leaderboard` and `ch:hints` are new channels, so
-   they follow the `ch:*` convention from the start.
+2. **Pub/Sub** — the worker → socket-server bridge (channels `verdicts` and `ch:run`, both
+   worker-originated), the API → socket-server bridge for `ch:leaderboard` and `ch:hints`
+   (contest scoring and hint streaming respectively — API-originated), plus the Socket.io
+   Redis adapter's internal channels for multi-instance socket scaling. Note: `verdicts`
+   deliberately breaks the `{scope}:{key}` namespacing convention used everywhere else in
+   this section (`lb:`, `rl:`, `cache:`) — it predates that convention and both the worker
+   (publisher) and socket server (subscriber) already agree on the literal name. Candidate
+   for a `ch:verdicts` rename during the Phase 7 hardening pass, updating both sides
+   together — not worth a piecemeal rename mid-feature. `ch:leaderboard`, `ch:hints`, and
+   `ch:run` are all newer channels, so they follow the `ch:*` convention from the start.
 3. **Live leaderboards** — `ZSET` per contest (`lb:{contestId}`).
    `ZINCRBY` on score events, `ZREVRANGE ... WITHSCORES` for reads, rank via `ZREVRANK`.
    O(log N) updates, zero DB reads on the hot path. TTL'd after contest end
@@ -390,7 +436,8 @@ single Redis is a SPOF in the student deployment; production path is Sentinel/Cl
   (leaderboard deltas, announcements, start/end events).
 - **Events (typed, shared with frontend):**
   - server→client: `submission:status`, `verdict`, `leaderboard:update`,
-    `contest:announcement`, `hint:chunk` / `hint:done`
+    `contest:announcement`, `hint:chunk` / `hint:done`, `run:result` (Run on samples, §5 —
+    a "go refetch `GET /api/run/:runId`" nudge only, same posture as `verdict`)
   - client→server: room join/leave only. **No business actions over sockets** —
     all mutations go through the REST API (single auth/validation/rate-limit path).
 - **Delivery guarantee posture:** push is best-effort; correctness comes from pull.
@@ -534,6 +581,12 @@ POST   /api/submissions              submit code (rate-limited, idempotent) → 
                                       being registered (see Phase 5)
 GET    /api/submissions/:id          status/verdict (polling fallback + history)
 GET    /api/problems/:slug/submissions   my submissions for a problem
+POST   /api/run                      run code against a problem's public samples only
+                                      (rate-limited: rl:run:{userId}, 1/3s + 60/hour) → 202
+                                      { runId }; never creates a Submission — no history,
+                                      no contest scoring, no hint eligibility (see §5)
+GET    /api/run/:runId               run status/result (polling fallback); 404 (not 403)
+                                      if missing/expired/not-yours
 POST   /api/hints                    { submissionId, level } → 201 { available:true,
                                       level, hintText, tokensUsed, hintsRemainingToday }
                                       on success; 200 { available:false, message } on
@@ -606,8 +659,10 @@ The architecture is deliberately such that scale-out changes deployment only:
 ## 13. Observability & Ops (minimum viable, do build)
 
 - **Metrics:** queue depth, judge latency (enqueue→verdict histogram), verdicts/min
-  by type, active socket connections, LLM tokens/day. Prometheus counters or even
-  a `/metrics` JSON endpoint v1 — existence matters more than tooling polish.
+  by type, runs/min (Run on samples, §5 — tracked separately from verdicts/min since a run
+  never touches the Submission collection), active socket connections, LLM tokens/day.
+  Prometheus counters or even a `/metrics` JSON endpoint v1 — existence matters more than
+  tooling polish.
 - **Logging:** structured (pino), one line per lifecycle event with submissionId
   as correlation id across api/worker/socket logs.
 - **Health:** `/health` per service (checks Mongo + Redis connectivity).

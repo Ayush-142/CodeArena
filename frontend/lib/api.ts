@@ -11,6 +11,7 @@ import type {
   ProblemDetail,
   ProblemSummary,
   RegisterContestResponse,
+  RunResponse,
   SubmissionDetail,
   SubmissionHistoryItem,
 } from './types';
@@ -133,6 +134,24 @@ export function createSubmission(
 
 export function getSubmission(id: string): Promise<SubmissionDetail> {
   return apiFetch<SubmissionDetail>(`/api/submissions/${id}`);
+}
+
+// "Run on samples" — no Idempotency-Key (there's no persisted document to dedupe against;
+// the rl:run:{userId} 1-per-3s window is what prevents a double-click from firing two runs).
+export function createRun(
+  problemSlug: string,
+  code: string,
+  language: 'cpp',
+  contestId?: string,
+): Promise<{ runId: string }> {
+  return apiFetch<{ runId: string }>('/api/run', {
+    method: 'POST',
+    body: JSON.stringify({ problemSlug, code, language, ...(contestId ? { contestId } : {}) }),
+  });
+}
+
+export function getRun(runId: string): Promise<RunResponse> {
+  return apiFetch<RunResponse>(`/api/run/${runId}`);
 }
 
 export function getContests(): Promise<ContestListResponse> {

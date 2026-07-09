@@ -206,6 +206,33 @@ export interface VerdictClientEvent {
   verdict: string;
 }
 
+// api/src/routes/run.ts — "Run on samples": executes against the problem's public samples
+// only, never a real submission (no history entry, no contest scoring, no hint eligibility —
+// see ARCHITECTURE.md §5). A subset of SubmissionStatus; CE is whole-run, not per-sample.
+export type RunSampleVerdict = 'AC' | 'WA' | 'TLE' | 'MLE' | 'RE';
+
+export interface RunSampleResult {
+  index: number;
+  verdict: RunSampleVerdict;
+  actualOutput: string; // truncated by the worker
+  expectedOutput: string;
+  execTimeMs?: number;
+}
+
+export interface RunResponse {
+  runId: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  compileError?: string; // present only on CE; samples is [] when present
+  samples: RunSampleResult[];
+}
+
+// Mirrors api/src/socket/types.ts RunClientEvent exactly — a "go refetch" signal only,
+// same "REST is truth" discipline as VerdictClientEvent. GET /api/run/:runId is the source
+// of truth; this event never carries the actual result payload.
+export interface RunClientEvent {
+  runId: string;
+}
+
 // api/src/routes/hints.ts POST / — a discriminated union: the degraded path (LLM
 // timeout/outage, global quota exhausted) is a 200, not an error, per the "never a
 // 5xx, judging path unaffected" design.

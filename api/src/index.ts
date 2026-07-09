@@ -12,6 +12,7 @@ import { attachUser } from './middleware/auth.js';
 import { AppError, errorHandler } from './middleware/errors.js';
 import { authRouter } from './routes/auth.js';
 import { submissionsRouter } from './routes/submissions.js';
+import { runRouter } from './routes/run.js';
 import { problemsRouter } from './routes/problems.js';
 import { contestsRouter } from './routes/contests.js';
 import { adminContestsRouter } from './routes/adminContests.js';
@@ -83,6 +84,7 @@ app.use(attachUser); // after cookie-parser (needs req.cookies), before all rout
 app.use('/api/auth', authRouter);
 app.use('/api/problems', problemsRouter);
 app.use('/api/submissions', submissionsRouter);
+app.use('/api/run', runRouter);
 app.use('/api/contests', contestsRouter);
 app.use('/api/admin/contests', adminContestsRouter);
 app.use('/api/hints', hintsRouter);

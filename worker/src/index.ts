@@ -6,9 +6,21 @@ import { Problem } from './models/Problem.js';
 import { judge } from './judge.js';
 import { redisUrl, redisClient } from './redis.js';
 import { scoreContestSubmission } from './scoring.js';
+import { runSamples } from './run.js';
+import { writeRunRecord } from './runStore.js';
 
 interface SubmissionJobData {
   submissionId: string;
+}
+
+// No submissionId — a run never creates a Submission document, so there's nothing to
+// re-read from Mongo except the Problem itself. Mirrors api/src/queue.ts's RunJobData.
+interface RunJobData {
+  runId: string;
+  userId: string;
+  problemId: string;
+  code: string;
+  language: 'cpp';
 }
 
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
@@ -67,6 +79,54 @@ worker.on('ready', () => {
 
 worker.on('failed', (job, err) => {
   console.error(`Job ${job?.id} failed`, err.message);
+});
+
+// Separate queue from `submissions` so a burst of Run requests can never delay real judging
+// (or vice versa) — see ARCHITECTURE.md §5, "Run on samples". No `attempts` option is passed
+// here or at the producer (api/src/routes/run.ts), so this defaults to BullMQ's attempts:1 —
+// deliberately fail-fast rather than silently retrying; a re-click is the retry mechanism.
+const runsWorker = new Worker<RunJobData>(
+  'runs',
+  async (job) => {
+    const { runId, userId, problemId, code } = job.data;
+
+    await writeRunRecord({ runId, userId, status: 'running', samples: [] });
+
+    const problem = await Problem.findById(problemId);
+    if (!problem) {
+      throw new Error(`problem ${problemId} not found`);
+    }
+
+    const result = await runSamples(code, problem);
+
+    await writeRunRecord({
+      runId,
+      userId,
+      status: 'done',
+      compileError: result.compileError,
+      samples: result.samples,
+    });
+
+    await redisClient.publish('ch:run', JSON.stringify({ runId, userId }));
+
+    return { runId };
+  },
+  { connection: { url: redisUrl }, prefix: 'queue' },
+);
+
+runsWorker.on('ready', () => {
+  console.log('Runs worker ready');
+});
+
+// Writes a terminal `failed` status so a client polling GET /api/run/:runId gets an answer
+// instead of hanging in `running` until the 10-minute Redis TTL silently expires.
+runsWorker.on('failed', (job, err) => {
+  console.error(`Run job ${job?.id} failed`, err.message);
+  if (!job?.data) return;
+  const { runId, userId } = job.data;
+  writeRunRecord({ runId, userId, status: 'failed', samples: [] })
+    .then(() => redisClient.publish('ch:run', JSON.stringify({ runId, userId })))
+    .catch((writeErr) => console.error(`[worker] failed to write failed-run record for ${runId}`, writeErr));
 });
 
 console.log('Worker started');

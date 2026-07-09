@@ -16,6 +16,8 @@ import type {
   LeaderboardPubSubMessage,
   HintClientEvent,
   HintPubSubMessage,
+  RunClientEvent,
+  RunPubSubMessage,
 } from './types.js';
 
 const VERDICTS_CHANNEL = 'verdicts';
@@ -24,6 +26,7 @@ const VERDICTS_CHANNEL = 'verdicts';
 // namespacing convention from the start.
 const LEADERBOARD_CHANNEL = 'ch:leaderboard';
 const HINTS_CHANNEL = 'ch:hints';
+const RUN_CHANNEL = 'ch:run';
 
 // Single entry point. Zero imports from routes/* — this module must stay movable to its own
 // process/workspace later by changing only the bootstrap that calls initSocket(httpServer).
@@ -183,6 +186,27 @@ export async function initSocket(
     } else {
       io.to(room).emit('hint:error', { submissionId: parsed.submissionId, level: parsed.level });
     }
+  });
+
+  // Same client, fourth subscription — run results are private to the requester, so this
+  // always emits to a user:{userId} room, same as verdicts/hints. Payload is deliberately
+  // just { runId }: GET /api/run/:runId is the source of truth, this is a "go refetch" nudge.
+  await verdictSubscriber.subscribe(RUN_CHANNEL, (message) => {
+    let parsed: RunPubSubMessage;
+    try {
+      parsed = JSON.parse(message) as RunPubSubMessage;
+    } catch (err) {
+      console.error('[socket] failed to parse run message', err, message);
+      return;
+    }
+    if (!parsed.userId) {
+      console.error('[socket] run message missing userId, dropping', parsed);
+      return;
+    }
+    const room = `user:${parsed.userId}`;
+    const payload: RunClientEvent = { runId: parsed.runId };
+    io.to(room).emit('run:result', payload);
+    console.log(`[socket] emitted run:result (run=${parsed.runId}) to room ${room}`);
   });
 
   return io;
