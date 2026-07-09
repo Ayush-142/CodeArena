@@ -155,9 +155,10 @@ Conventions:
 - Shared types (verdicts, socket event payloads, API DTOs) live in a `/shared` package
   or are duplicated deliberately with a comment — never drift silently.
 - All Redis keys namespaced: `queue:*` (BullMQ manages its own), `lb:{contestId}`,
-  `rl:{scope}:{userId}`, `cache:problem:{slug}`, `cache:hint:{key}`. The verdict pub/sub
-  channel is named `verdicts` (no prefix) — see §7 for why it's a documented exception to
-  this convention rather than a typo.
+  `rl:{scope}:{userId}`, `cache:problem:{slug}`, `cache:hint:{key}`, `metrics:{name}` (Phase 7).
+  The verdict pub/sub channel is `ch:verdicts`, alongside `ch:leaderboard`/`ch:hints`/`ch:run` —
+  no exceptions to this convention remain (the channel was originally unprefixed `verdicts`;
+  renamed during the Phase 7 hardening pass, see §7).
 - Commit after every verified feature; imperative commit messages.
 
 ---
@@ -255,20 +256,21 @@ Kept for auditability, cost tracking, and cache warm-up.
    c. **Compile step** (compiled languages): run compiler inside a sandbox container.
       Non-zero exit → verdict `CE`, store truncated compiler output, done.
    d. **Run step**: for each test case, run the binary in a fresh sandbox (see §6)
-      with the problem's time/memory limits. Compare stdout to expected output
-      (trim trailing whitespace per line; exact match otherwise — special judges
-      are out of scope v1).
+      with the problem's time/memory limits. Compare stdout to expected output via
+      `compareOutput()` (`worker/src/compare.ts`, shared with Run on samples): a single
+      whole-string `.trim()` on both sides, exact match otherwise — not a per-line trim
+      (special judges are out of scope v1).
       First failure short-circuits: record verdict + `failedTestIndex`.
    e. All passed → `AC`.
 4. **Record + publish.** Worker writes final verdict to MongoDB, then publishes
    `{ submissionId, userId, contestId?, verdict, execTimeMs, failedTestIndex? }`
-   to Redis Pub/Sub channel `verdicts`.
+   to Redis Pub/Sub channel `ch:verdicts`.
 5. **Contest scoring (if contestId present).** Worker (or a thin scoring module it
    calls) applies scoring atomically: on first `AC` for (user, problem) →
    `ZINCRBY lb:{contestId}` with score delta; wrong attempts tracked for penalty.
    Scoring writes go to BOTH Redis (live) and MongoDB (durable) — Redis for reads,
    Mongo for truth.
-6. **Deliver.** Socket server(s), subscribed to `verdicts`, emit:
+6. **Deliver.** Socket server(s), subscribed to `ch:verdicts`, emit:
    - `verdict` → to the submitting user's room `user:{userId}`
    - `leaderboard:update` → to room `contest:{contestId}` (if applicable)
 7. **Client.** UI transitions Queued → Running → final verdict badge; leaderboard
@@ -367,16 +369,13 @@ Enumerate deliberately; each is a separate concept and a separate interview answ
 
 1. **Job queue (BullMQ)** — decouples accepting submissions from judging them.
    Absorbs contest-start bursts; workers scale on queue depth.
-2. **Pub/Sub** — the worker → socket-server bridge (channels `verdicts` and `ch:run`, both
+2. **Pub/Sub** — the worker → socket-server bridge (channels `ch:verdicts` and `ch:run`, both
    worker-originated), the API → socket-server bridge for `ch:leaderboard` and `ch:hints`
    (contest scoring and hint streaming respectively — API-originated), plus the Socket.io
-   Redis adapter's internal channels for multi-instance socket scaling. Note: `verdicts`
-   deliberately breaks the `{scope}:{key}` namespacing convention used everywhere else in
-   this section (`lb:`, `rl:`, `cache:`) — it predates that convention and both the worker
-   (publisher) and socket server (subscriber) already agree on the literal name. Candidate
-   for a `ch:verdicts` rename during the Phase 7 hardening pass, updating both sides
-   together — not worth a piecemeal rename mid-feature. `ch:leaderboard`, `ch:hints`, and
-   `ch:run` are all newer channels, so they follow the `ch:*` convention from the start.
+   Redis adapter's internal channels for multi-instance socket scaling. All four app-level
+   channels follow the `ch:*` convention (`ch:verdicts` was originally an unprefixed
+   `verdicts`, predating the convention; renamed in the Phase 7 hardening pass, both publisher
+   and subscriber updated together in one change).
 3. **Live leaderboards** — `ZSET` per contest (`lb:{contestId}`).
    `ZINCRBY` on score events, `ZREVRANGE ... WITHSCORES` for reads, rank via `ZREVRANK`.
    O(log N) updates, zero DB reads on the hot path. TTL'd after contest end

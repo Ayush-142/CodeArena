@@ -1,6 +1,7 @@
 import type { ProblemDoc } from './models/Problem.js';
 import { compileCode, runTest } from './sandbox.js';
 import type { RunSampleResult, RunSampleVerdict } from './runStore.js';
+import { compareOutput } from './compare.js';
 
 // Post-hoc string slice on the already-captured stdout — not a change to sandbox.ts's
 // capture behavior, so real judging's (separately pre-existing) unbounded capture is
@@ -42,7 +43,7 @@ export async function runSamples(code: string, problem: ProblemDoc): Promise<Run
     } else if (result.exitCode !== 0) {
       verdict = 'RE';
       actualOutput = result.stdout;
-    } else if (result.stdout.trim() !== sample.output.trim()) {
+    } else if (!compareOutput(result.stdout, sample.output)) {
       verdict = 'WA';
       actualOutput = result.stdout;
     } else {

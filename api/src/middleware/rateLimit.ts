@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { redisClient } from '../redis/client.js';
 import { AppError } from './errors.js';
 import type { RateWindow } from '../config/rateLimits.js';
+import { logger } from '../logger.js';
 
 // Sliding-window request log implemented as a Redis ZSET, checked/updated atomically in one
 // Lua script. Chosen over a two-bucket/fixed-window approximation: at this project's request
@@ -88,7 +89,7 @@ export function rateLimit(opts: {
       // Logged at error level on every occurrence: fail-open must never fail silently, since
       // this is the one path where abuse-prevention goes unenforced — ops needs a log trail
       // to notice a sustained Redis outage.
-      console.error(`rate limit check failed for key=${key}, failing open`, err);
+      logger.error({ err, key }, 'rate limit check failed, failing open');
       next();
     }
   };

@@ -70,7 +70,7 @@ function compareUserIdDescending(a: string, b: string): number {
 // needed for in-flight jobs (this is what lets tryFinalizeContest finalize past its
 // grace window even with a permanently-stuck job: that submission just contributes
 // nothing here).
-function scoreGroup(
+export function scoreGroup(
   entries: { status: string; createdAt: Date }[],
   startAt: Date,
 ): { solved: boolean; solveMinutes?: number; wrongAttempts: number } {

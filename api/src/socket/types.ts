@@ -11,7 +11,7 @@ export interface VerdictClientEvent {
 }
 
 /**
- * Raw message shape published by the worker to Redis channel `verdicts` (worker/src/index.ts).
+ * Raw message shape published by the worker to Redis channel `ch:verdicts` (worker/src/index.ts).
  * Internal to the socket module only — userId is stripped before anything is emitted to a
  * client; a client never sees this shape (room membership implies userId instead).
  */

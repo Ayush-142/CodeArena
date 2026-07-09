@@ -6,6 +6,8 @@ import { parse as parseCookieHeader } from 'cookie';
 import mongoose from 'mongoose';
 import { env } from '../config/env.js';
 import { AUTH_COOKIE_NAME, verifyAuthToken } from '../middleware/auth.js';
+import { incrementActiveSocketConnections, decrementActiveSocketConnections } from '../metrics.js';
+import { logger } from '../logger.js';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -20,10 +22,7 @@ import type {
   RunPubSubMessage,
 } from './types.js';
 
-const VERDICTS_CHANNEL = 'verdicts';
-// New channels, so unlike the legacy unprefixed `verdicts` (a documented pre-convention
-// exception — see ARCHITECTURE.md §3/§7), these follow the general ch:*/scoped-key
-// namespacing convention from the start.
+const VERDICTS_CHANNEL = 'ch:verdicts';
 const LEADERBOARD_CHANNEL = 'ch:leaderboard';
 const HINTS_CHANNEL = 'ch:hints';
 const RUN_CHANNEL = 'ch:run';
@@ -47,9 +46,9 @@ export async function initSocket(
   // other Redis commands elsewhere (e.g. rate limiting) and node-redis v4 clients that enter
   // subscriber mode can no longer run arbitrary commands, so pub/sub clients must be isolated.
   const adapterPubClient = createClient({ url: env.redisUrl });
-  adapterPubClient.on('error', (err) => console.error('[socket] adapter pub client error', err));
+  adapterPubClient.on('error', (err) => logger.error({ err }, '[socket] adapter pub client error'));
   const adapterSubClient = adapterPubClient.duplicate();
-  adapterSubClient.on('error', (err) => console.error('[socket] adapter sub client error', err));
+  adapterSubClient.on('error', (err) => logger.error({ err }, '[socket] adapter sub client error'));
   await Promise.all([adapterPubClient.connect(), adapterSubClient.connect()]);
   io.adapter(createAdapter(adapterPubClient, adapterSubClient));
 
@@ -86,7 +85,8 @@ export async function initSocket(
     const { user } = socket.data;
     const room = `user:${user.userId}`;
     socket.join(room);
-    console.log(`[socket] ${socket.id} connected as ${user.handle} (${user.userId}), joined room ${room}`);
+    incrementActiveSocketConnections();
+    logger.info({ socketId: socket.id, userId: user.userId, handle: user.handle, room }, '[socket] connected');
 
     // Contest-room membership isn't derivable from the JWT the way user:{userId} is, so
     // the client asks explicitly. No authorization check beyond a well-formed id — contest
@@ -102,17 +102,18 @@ export async function initSocket(
     });
 
     socket.on('disconnect', (reason) => {
-      console.log(`[socket] ${socket.id} disconnected (${reason})`);
+      decrementActiveSocketConnections();
+      logger.info({ socketId: socket.id, reason }, '[socket] disconnected');
     });
   });
 
-  // --- Dedicated 3rd Redis client: app-level subscriber for channel `verdicts`. ---
+  // --- Dedicated 3rd Redis client: app-level subscriber for channel `ch:verdicts`. ---
   // Deliberately separate from adapterPubClient/adapterSubClient above — those two are owned
   // by @socket.io/redis-adapter for its own internal cross-instance broadcast protocol; mixing
   // this app-level subscription onto them would conflate two different concerns, and node-redis
   // v4 clients in subscriber mode can't run other commands anyway.
   const verdictSubscriber = createClient({ url: env.redisUrl });
-  verdictSubscriber.on('error', (err) => console.error('[socket] verdict subscriber error', err));
+  verdictSubscriber.on('error', (err) => logger.error({ err }, '[socket] verdict subscriber error'));
   await verdictSubscriber.connect();
 
   await verdictSubscriber.subscribe(VERDICTS_CHANNEL, (message) => {
@@ -120,11 +121,11 @@ export async function initSocket(
     try {
       parsed = JSON.parse(message) as VerdictPubSubMessage;
     } catch (err) {
-      console.error('[socket] failed to parse verdicts message', err, message);
+      logger.error({ err, message }, '[socket] failed to parse verdicts message');
       return;
     }
     if (!parsed.userId) {
-      console.error('[socket] verdicts message missing userId, dropping', parsed);
+      logger.error({ parsed }, '[socket] verdicts message missing userId, dropping');
       return;
     }
     const room = `user:${parsed.userId}`;
@@ -132,7 +133,7 @@ export async function initSocket(
     // implied by which room received it; never broadcast, only io.to(room).
     const payload: VerdictClientEvent = { submissionId: parsed.submissionId, verdict: parsed.verdict };
     io.to(room).emit('verdict', payload);
-    console.log(`[socket] emitted verdict (submission=${parsed.submissionId}) to room ${room}`);
+    logger.info({ submissionId: parsed.submissionId, room }, '[socket] emitted verdict');
   });
 
   // Same client, second subscription — node-redis v4 supports multiple channel
@@ -142,11 +143,11 @@ export async function initSocket(
     try {
       parsed = JSON.parse(message) as LeaderboardPubSubMessage;
     } catch (err) {
-      console.error('[socket] failed to parse leaderboard message', err, message);
+      logger.error({ err, message }, '[socket] failed to parse leaderboard message');
       return;
     }
     if (!parsed.contestId) {
-      console.error('[socket] leaderboard message missing contestId, dropping', parsed);
+      logger.error({ parsed }, '[socket] leaderboard message missing contestId, dropping');
       return;
     }
     const room = `contest:${parsed.contestId}`;
@@ -160,7 +161,7 @@ export async function initSocket(
         message: 'Contest finalized — final standings are posted.',
       });
     }
-    console.log(`[socket] emitted leaderboard:update (contest=${parsed.contestId}) to room ${room}`);
+    logger.info({ contestId: parsed.contestId, room }, '[socket] emitted leaderboard:update');
   });
 
   // Same client, third subscription — hints are private, so this always emits to a
@@ -170,11 +171,11 @@ export async function initSocket(
     try {
       parsed = JSON.parse(message) as HintPubSubMessage;
     } catch (err) {
-      console.error('[socket] failed to parse hints message', err, message);
+      logger.error({ err, message }, '[socket] failed to parse hints message');
       return;
     }
     if (!parsed.userId) {
-      console.error('[socket] hints message missing userId, dropping', parsed);
+      logger.error({ parsed }, '[socket] hints message missing userId, dropping');
       return;
     }
     const room = `user:${parsed.userId}`;
@@ -196,17 +197,17 @@ export async function initSocket(
     try {
       parsed = JSON.parse(message) as RunPubSubMessage;
     } catch (err) {
-      console.error('[socket] failed to parse run message', err, message);
+      logger.error({ err, message }, '[socket] failed to parse run message');
       return;
     }
     if (!parsed.userId) {
-      console.error('[socket] run message missing userId, dropping', parsed);
+      logger.error({ parsed }, '[socket] run message missing userId, dropping');
       return;
     }
     const room = `user:${parsed.userId}`;
     const payload: RunClientEvent = { runId: parsed.runId };
     io.to(room).emit('run:result', payload);
-    console.log(`[socket] emitted run:result (run=${parsed.runId}) to room ${room}`);
+    logger.info({ runId: parsed.runId, room }, '[socket] emitted run:result');
   });
 
   return io;

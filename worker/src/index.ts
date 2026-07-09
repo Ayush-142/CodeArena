@@ -8,6 +8,8 @@ import { redisUrl, redisClient } from './redis.js';
 import { scoreContestSubmission } from './scoring.js';
 import { runSamples } from './run.js';
 import { writeRunRecord } from './runStore.js';
+import { recordVerdict, recordRun, recordJudgeLatency, startWorkerHeartbeat } from './metrics.js';
+import { logger } from './logger.js';
 
 interface SubmissionJobData {
   submissionId: string;
@@ -28,6 +30,10 @@ await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codea
 const worker = new Worker<SubmissionJobData>(
   'submissions',
   async (job) => {
+    // Bound once per job — every log line below carries submissionId, the correlation id
+    // threaded across api/worker/socket logs for this submission (ARCHITECTURE.md §13).
+    const log = logger.child({ submissionId: job.data.submissionId });
+
     const submission = await Submission.findById(job.data.submissionId);
     if (!submission) {
       throw new Error(`submission ${job.data.submissionId} not found`);
@@ -51,7 +57,7 @@ const worker = new Worker<SubmissionJobData>(
     await submission.save();
 
     await redisClient.publish(
-      'verdicts',
+      'ch:verdicts',
       JSON.stringify({
         submissionId: job.data.submissionId,
         userId: submission.userId.toString(),
@@ -59,13 +65,23 @@ const worker = new Worker<SubmissionJobData>(
       }),
     );
 
+    log.info({ verdict: result.verdict, execTimeMs: result.execTimeMs }, 'verdict recorded');
+
+    // Metrics must never fail the judge job — same posture as contest scoring below.
+    try {
+      await recordVerdict(result.verdict);
+      await recordJudgeLatency(job.timestamp);
+    } catch (err) {
+      log.error({ err }, 'metrics recording failed');
+    }
+
     // Contest scoring must never fail the judge job — a scoring bug shouldn't cause
     // BullMQ to re-run compile+sandbox+run for something that already has a verdict.
     // Any missed increment self-heals at the next leaderboard rebuild/finalization.
     try {
       await scoreContestSubmission(submission);
     } catch (err) {
-      console.error(`[worker] contest scoring failed for submission ${submission._id.toString()}`, err);
+      log.error({ err }, 'contest scoring failed');
     }
 
     return { verdict: result.verdict };
@@ -74,11 +90,11 @@ const worker = new Worker<SubmissionJobData>(
 );
 
 worker.on('ready', () => {
-  console.log('Worker ready');
+  logger.info('Worker ready');
 });
 
 worker.on('failed', (job, err) => {
-  console.error(`Job ${job?.id} failed`, err.message);
+  logger.error({ submissionId: job?.data.submissionId, err: err.message }, 'judge job failed');
 });
 
 // Separate queue from `submissions` so a burst of Run requests can never delay real judging
@@ -89,6 +105,8 @@ const runsWorker = new Worker<RunJobData>(
   'runs',
   async (job) => {
     const { runId, userId, problemId, code } = job.data;
+    // Bound once per job — mirrors the judge worker's submissionId-scoped child logger above.
+    const log = logger.child({ runId });
 
     await writeRunRecord({ runId, userId, status: 'running', samples: [] });
 
@@ -109,24 +127,34 @@ const runsWorker = new Worker<RunJobData>(
 
     await redisClient.publish('ch:run', JSON.stringify({ runId, userId }));
 
+    log.info('run completed');
+
+    try {
+      await recordRun();
+    } catch (err) {
+      log.error({ err }, 'metrics recording failed');
+    }
+
     return { runId };
   },
   { connection: { url: redisUrl }, prefix: 'queue' },
 );
 
 runsWorker.on('ready', () => {
-  console.log('Runs worker ready');
+  logger.info('Runs worker ready');
 });
 
 // Writes a terminal `failed` status so a client polling GET /api/run/:runId gets an answer
 // instead of hanging in `running` until the 10-minute Redis TTL silently expires.
 runsWorker.on('failed', (job, err) => {
-  console.error(`Run job ${job?.id} failed`, err.message);
+  logger.error({ runId: job?.data.runId, err: err.message }, 'run job failed');
   if (!job?.data) return;
   const { runId, userId } = job.data;
   writeRunRecord({ runId, userId, status: 'failed', samples: [] })
     .then(() => redisClient.publish('ch:run', JSON.stringify({ runId, userId })))
-    .catch((writeErr) => console.error(`[worker] failed to write failed-run record for ${runId}`, writeErr));
+    .catch((writeErr) => logger.error({ runId, err: writeErr }, 'failed to write failed-run record'));
 });
 
-console.log('Worker started');
+startWorkerHeartbeat();
+
+logger.info('Worker started');

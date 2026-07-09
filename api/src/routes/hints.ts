@@ -23,6 +23,8 @@ import {
   tryConsumeGlobalDailyHintSlot,
   refundGlobalDailyHintSlot,
 } from '../hints/quota.js';
+import { recordHintTokens, recordHintCacheHit, recordHintCacheMiss } from '../metrics.js';
+import { logger } from '../logger.js';
 
 export const hintsRouter = Router();
 
@@ -124,7 +126,9 @@ hintsRouter.post(
       // that the true limit is known.
       hintText = cached;
       tokensUsed = 0; // no LLM tokens spent producing this record — see decision 19
+      await recordHintCacheHit();
     } else {
+      await recordHintCacheMiss();
       const globalToken = await tryConsumeGlobalHintSlot(env.hintGlobalRpmLimit);
       if (!globalToken) {
         await refundDailyHint(userId, dailyToken);
@@ -169,11 +173,15 @@ hintsRouter.post(
         hintText = result.hintText;
         tokensUsed = result.tokensUsed;
         await redisClient.set(cacheKey, hintText); // content-addressed — no TTL needed
+        await recordHintTokens(tokensUsed);
       } catch (err) {
         if (err instanceof ApiError && err.status === 429) {
-          console.error('[hints] Gemini RESOURCE_EXHAUSTED — global limiter may be set too high', err.message);
+          logger.error(
+            { submissionId, err: err.message },
+            '[hints] Gemini RESOURCE_EXHAUSTED — global limiter may be set too high',
+          );
         } else {
-          console.error('[hints] generateHint failed', err);
+          logger.error({ submissionId, err }, '[hints] generateHint failed');
         }
         await refundDailyHint(userId, dailyToken);
         await refundGlobalHintSlot(globalToken);

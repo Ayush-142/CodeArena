@@ -17,7 +17,10 @@ import { problemsRouter } from './routes/problems.js';
 import { contestsRouter } from './routes/contests.js';
 import { adminContestsRouter } from './routes/adminContests.js';
 import { hintsRouter } from './routes/hints.js';
+import { metricsRouter } from './routes/metrics.js';
 import { initSocket } from './socket/index.js';
+import { getWorkerHeartbeat } from './metrics.js';
+import { logger } from './logger.js';
 
 // Reproduced against @google/genai@2.10.0 (pinned "^2.10.0" in api/package.json; confirmed
 // installed version via node_modules/@google/genai/package.json). Root cause (confirmed by a
@@ -88,6 +91,7 @@ app.use('/api/run', runRouter);
 app.use('/api/contests', contestsRouter);
 app.use('/api/admin/contests', adminContestsRouter);
 app.use('/api/hints', hintsRouter);
+app.use('/metrics', metricsRouter);
 
 // Dev-only static test client (api/public/socket-test.html) — never served in production.
 // Placed before the 404 catch-all below so requests for it don't fall through to it.
@@ -101,7 +105,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.get('/ready', async (_req, res) => {
-  const state = { mongo: false, redis: false };
+  const state = { mongo: false, redis: false, worker: false };
 
   try {
     await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
@@ -115,6 +119,15 @@ app.get('/ready', async (_req, res) => {
     state.redis = true;
   } catch {
     state.redis = false;
+  }
+
+  try {
+    // The worker has no HTTP endpoint of its own (pure BullMQ consumer) — its liveness is a
+    // Redis heartbeat key it refreshes every 10s (worker/src/metrics.ts), read here as a third
+    // readiness boolean alongside mongo/redis.
+    state.worker = (await getWorkerHeartbeat()).alive;
+  } catch {
+    state.worker = false;
   }
 
   res.json(state);
@@ -131,5 +144,5 @@ await initSocket(httpServer);
 
 const port = Number(process.env.PORT || 3001);
 httpServer.listen(port, () => {
-  console.log(`API listening on ${port}`);
+  logger.info({ port }, 'API listening');
 });

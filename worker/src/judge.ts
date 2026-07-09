@@ -2,6 +2,7 @@ import type { ProblemDoc } from './models/Problem.js';
 import type { Verdict } from './models/Submission.js';
 import { compileCode, runTest } from './sandbox.js';
 import { getTestFile } from './testcases.js';
+import { compareOutput } from './compare.js';
 
 export interface JudgeResult {
   verdict: Verdict;
@@ -50,7 +51,7 @@ export async function judge(
         output: result.stdout,
       };
     }
-    if (result.stdout.trim() !== expectedOutput.trim()) {
+    if (!compareOutput(result.stdout, expectedOutput)) {
       return {
         verdict: 'WA',
         failedTestIndex: i,
