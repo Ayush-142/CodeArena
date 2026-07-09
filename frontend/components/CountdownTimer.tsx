@@ -11,6 +11,15 @@ function formatDuration(ms: number): string {
   return [hours, minutes, seconds].map((n) => String(n).padStart(2, '0')).join(':');
 }
 
+const URGENT_MS = 60 * 1000; // under 1 minute
+const WARNING_MS = 5 * 60 * 1000; // under 5 minutes
+
+function urgencyClass(remainingMs: number): string {
+  if (remainingMs <= URGENT_MS) return 'text-verdict-wa';
+  if (remainingMs <= WARNING_MS) return 'text-verdict-tle';
+  return 'text-ink';
+}
+
 // serverTime comes from the response that fetched targetTime (contest startAt/endAt) —
 // see Phase 5 plan decision #8.
 export function CountdownTimer({ targetTime, serverTime }: { targetTime: string | number; serverTime: number }) {
@@ -30,5 +39,6 @@ export function CountdownTimer({ targetTime, serverTime }: { targetTime: string 
   }, []);
 
   const target = new Date(targetTime).getTime();
-  return <span>{formatDuration(target - now)}</span>;
+  const remaining = target - now;
+  return <span className={`font-mono tabular-nums ${urgencyClass(remaining)}`}>{formatDuration(remaining)}</span>;
 }

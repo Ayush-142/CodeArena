@@ -18,6 +18,9 @@ import {
   registerForContest,
 } from '@/lib/api';
 import type { ContestDetailResponse, ProblemDetail, SubmissionStatus, VerdictClientEvent } from '@/lib/types';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 const TERMINAL_STATUSES: SubmissionStatus[] = ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE'];
 
@@ -45,6 +48,8 @@ export default function ContestDetailPage() {
   const [submissionView, setSubmissionView] = useState<SubmissionView | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useDocumentTitle(data?.contest.title ?? 'Contest');
 
   const currentSubmissionIdRef = useRef<string | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -157,41 +162,56 @@ export default function ContestDetailPage() {
     }
   }
 
-  if (error) return <main className="p-4">{error}</main>;
-  if (!data) return <main className="p-4">Loading…</main>;
+  if (error) return <main className="p-4"><ErrorState message={error} /></main>;
+  if (!data) {
+    return (
+      <main className="flex flex-col gap-4 p-4">
+        <Skeleton className="h-7 w-1/3" />
+        <Skeleton className="h-4 w-1/2" />
+      </main>
+    );
+  }
 
   const { contest, phase, isRegistered, problems } = data;
 
   return (
     <main className="flex flex-col gap-6 p-4">
       <div>
-        <h1 className="text-xl font-semibold">{contest.title}</h1>
+        <h1 className="font-display text-xl font-bold text-ink">{contest.title}</h1>
         {phase === 'upcoming' ? (
-          <p className="text-sm">
+          <p className="font-mono text-sm text-ink/80">
             starts in <CountdownTimer targetTime={contest.startAt} serverTime={data.serverTime} />
           </p>
         ) : phase === 'running' ? (
-          <p className="text-sm text-yellow-400">
+          <p className="font-mono text-sm text-accent">
             running · ends in <CountdownTimer targetTime={contest.endAt} serverTime={data.serverTime} />
           </p>
         ) : (
-          <p className="text-sm text-slate-400">ended</p>
+          <p className="font-mono text-sm text-ink/50">ended</p>
         )}
       </div>
 
       {phase === 'upcoming' && !isRegistered ? (
         <div>
-          <button onClick={handleRegister} disabled={registering} className="border border-slate-600 p-2">
+          <button
+            onClick={handleRegister}
+            disabled={registering}
+            className="border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+          >
             {registering ? 'Registering…' : 'Register'}
           </button>
-          {registerError ? <p className="mt-2 text-red-400">{registerError}</p> : null}
+          {registerError ? (
+            <div className="mt-2">
+              <ErrorState message={registerError} />
+            </div>
+          ) : null}
         </div>
       ) : phase === 'upcoming' && isRegistered ? (
-        <p className="text-green-400">You&apos;re registered.</p>
+        <p className="font-mono text-sm text-verdict-ac">You&apos;re registered.</p>
       ) : null}
 
       {phase !== 'upcoming' ? (
-        <Link href={`/contests/${id}/leaderboard`} className="text-sm underline">
+        <Link href={`/contests/${id}/leaderboard`} className="font-mono text-sm text-accent underline">
           View leaderboard
         </Link>
       ) : null}
@@ -199,13 +219,17 @@ export default function ContestDetailPage() {
       {phase === 'running' ? (
         <div className="flex flex-col gap-4">
           <div>
-            <h2 className="mb-2 font-semibold">Problems</h2>
+            <h2 className="mb-2 font-display font-bold text-ink">Problems</h2>
             <ul className="flex flex-wrap gap-2">
               {problems.map((p) => (
                 <li key={p.slug}>
                   <button
                     onClick={() => selectProblem(p)}
-                    className={`border border-slate-600 p-2 ${selectedProblem?.slug === p.slug ? 'bg-slate-800' : ''}`}
+                    className={`border px-3 py-2 font-mono text-sm ${
+                      selectedProblem?.slug === p.slug
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-line text-ink hover:border-ink'
+                    }`}
                   >
                     {p.title}
                   </button>
@@ -215,23 +239,29 @@ export default function ContestDetailPage() {
           </div>
 
           {selectedProblem ? (
-            <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <MarkdownStatement statementMd={selectedProblem.statementMd} />
-              <MonacoEditorPanel code={code} onChange={setCode} />
-              <div>
-                <button onClick={handleSubmit} disabled={submitting} className="border border-slate-600 p-2">
-                  {submitting ? 'Submitting…' : 'Submit'}
-                </button>
-                {submitError ? <p className="mt-2 text-red-400">{submitError}</p> : null}
-                {submissionView ? (
-                  <p className="mt-2">
-                    <VerdictBadge
-                      status={submissionView.status}
-                      failedTestIndex={submissionView.failedTestIndex}
-                      execTimeMs={submissionView.execTimeMs}
-                    />
-                  </p>
-                ) : null}
+              <div className="flex flex-col gap-4">
+                <MonacoEditorPanel code={code} onChange={setCode} />
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+                  >
+                    {submitting ? 'Submitting…' : 'Submit'}
+                  </button>
+                  {submitError ? <ErrorState message={submitError} /> : null}
+                  {submissionView ? (
+                    <div>
+                      <VerdictBadge
+                        status={submissionView.status}
+                        failedTestIndex={submissionView.failedTestIndex}
+                        execTimeMs={submissionView.execTimeMs}
+                      />
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : null}
@@ -240,11 +270,11 @@ export default function ContestDetailPage() {
 
       {phase === 'ended' ? (
         <div>
-          <h2 className="mb-2 font-semibold">Problems (now public practice)</h2>
+          <h2 className="mb-2 font-display font-bold text-ink">Problems (now public practice)</h2>
           <ul className="flex flex-col gap-2">
             {problems.map((p) => (
               <li key={p.slug}>
-                <Link href={`/problems/${p.slug}`} className="underline">
+                <Link href={`/problems/${p.slug}`} className="font-body text-accent underline">
                   {p.title}
                 </Link>
               </li>

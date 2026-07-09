@@ -12,23 +12,23 @@ export function ContestCard({ contest, serverTime }: { contest: ContestSummary; 
   const phase = computePhase(contest.startAt, contest.endAt, serverTime);
 
   return (
-    <li className="border border-slate-700 p-3">
-      <Link href={`/contests/${contest._id}`} className="font-semibold underline">
+    <li className="border border-line p-3 hover:border-ink">
+      <Link href={`/contests/${contest._id}`} className="font-display font-bold text-ink underline">
         {contest.title}
       </Link>
-      <p className="text-sm text-slate-400">
+      <p className="font-mono text-sm text-ink/60">
         {contest.problemCount} problems · {contest.isRegistered ? 'registered' : 'not registered'}
       </p>
       {phase === 'upcoming' ? (
-        <p className="text-sm">
+        <p className="font-mono text-sm text-ink/80">
           starts in <CountdownTimer targetTime={contest.startAt} serverTime={serverTime} />
         </p>
       ) : phase === 'running' ? (
-        <p className="text-sm text-yellow-400">
+        <p className="font-mono text-sm text-accent">
           running · ends in <CountdownTimer targetTime={contest.endAt} serverTime={serverTime} />
         </p>
       ) : (
-        <p className="text-sm text-slate-400">ended</p>
+        <p className="font-mono text-sm text-ink/50">ended</p>
       )}
     </li>
   );
