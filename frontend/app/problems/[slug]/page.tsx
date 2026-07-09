@@ -11,6 +11,9 @@ import { HintPanel } from '@/components/HintPanel';
 import { SubmissionHistory } from '@/components/SubmissionHistory';
 import { ApiError, createSubmission, getProblem, getRetryAfterSeconds, getSubmission } from '@/lib/api';
 import type { ProblemDetail, SubmissionStatus, VerdictClientEvent } from '@/lib/types';
+import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 const TERMINAL_STATUSES: SubmissionStatus[] = ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE'];
 // Mirrors api/src/routes/hints.ts ELIGIBLE_VERDICTS exactly — hints unlock only for
@@ -39,6 +42,8 @@ export default function ProblemSolvingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  useDocumentTitle(problem?.title ?? 'Problem');
 
   // Mirrors currentSubmissionId for use inside async callbacks/timers, which otherwise close
   // over a stale value from whichever render scheduled them.
@@ -139,57 +144,78 @@ export default function ProblemSolvingPage() {
     }
   }
 
-  if (problemError) return <main className="p-4">{problemError}</main>;
-  if (!problem) return <main className="p-4">Loading…</main>;
+  if (problemError) return <main className="p-4"><ErrorState message={problemError} /></main>;
+  if (!problem) {
+    return (
+      <main className="flex flex-col gap-4 p-4">
+        <Skeleton className="h-7 w-1/3" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-64 w-full" />
+      </main>
+    );
+  }
 
   return (
     <main className="flex flex-col gap-6 p-4">
-      <div>
-        <h1 className="text-xl font-semibold">{problem.title}</h1>
-        <p className="text-sm text-slate-400">
-          {problem.difficulty} · time limit {problem.timeLimitMs}ms · memory limit {problem.memoryLimitMb}MB
-        </p>
-      </div>
-
-      <MarkdownStatement statementMd={problem.statementMd} />
-
-      <div>
-        <h2 className="mb-2 font-semibold">Samples</h2>
-        {problem.samples.map((sample, i) => (
-          <div key={i} className="mb-2 grid grid-cols-2 gap-2">
-            <pre className="whitespace-pre-wrap bg-slate-800 p-2">{sample.input}</pre>
-            <pre className="whitespace-pre-wrap bg-slate-800 p-2">{sample.output}</pre>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Left pane: statement + samples */}
+        <div className="flex flex-col gap-4">
+          <div>
+            <h1 className="font-display text-xl font-bold text-ink">{problem.title}</h1>
+            <p className="font-mono text-sm text-ink/60">
+              {problem.difficulty} · time limit {problem.timeLimitMs}ms · memory limit {problem.memoryLimitMb}MB
+            </p>
           </div>
-        ))}
+
+          <MarkdownStatement statementMd={problem.statementMd} />
+
+          <div>
+            <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
+            {problem.samples.map((sample, i) => (
+              <div key={i} className="mb-2 grid grid-cols-2 gap-2">
+                <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                  {sample.input}
+                </pre>
+                <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                  {sample.output}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right pane: editor, submit, verdict, hints */}
+        <div className="flex flex-col gap-4">
+          <MonacoEditorPanel code={code} onChange={setCode} />
+
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+            >
+              {submitting ? 'Submitting…' : 'Submit'}
+            </button>
+            {submitError ? <ErrorState message={submitError} /> : null}
+            {submissionView ? (
+              <div>
+                <VerdictBadge
+                  status={submissionView.status}
+                  failedTestIndex={submissionView.failedTestIndex}
+                  execTimeMs={submissionView.execTimeMs}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          {submissionView && currentSubmissionId && HINT_ELIGIBLE_STATUSES.includes(submissionView.status) ? (
+            <HintPanel submissionId={currentSubmissionId} problemSlug={slug} />
+          ) : null}
+        </div>
       </div>
 
-      <MonacoEditorPanel code={code} onChange={setCode} />
-
       <div>
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="border border-slate-600 p-2"
-        >
-          {submitting ? 'Submitting…' : 'Submit'}
-        </button>
-        {submitError ? <p className="mt-2 text-red-400">{submitError}</p> : null}
-        {submissionView ? (
-          <p className="mt-2">
-            <VerdictBadge
-              status={submissionView.status}
-              failedTestIndex={submissionView.failedTestIndex}
-              execTimeMs={submissionView.execTimeMs}
-            />
-          </p>
-        ) : null}
-        {submissionView && currentSubmissionId && HINT_ELIGIBLE_STATUSES.includes(submissionView.status) ? (
-          <HintPanel submissionId={currentSubmissionId} problemSlug={slug} />
-        ) : null}
-      </div>
-
-      <div>
-        <h2 className="mb-2 font-semibold">My Submissions</h2>
+        <h2 className="mb-2 font-display font-bold text-ink">My Submissions</h2>
         <SubmissionHistory slug={slug} refreshKey={historyRefreshKey} />
       </div>
     </main>
