@@ -207,11 +207,7 @@ export default function ContestDetailPage() {
 
       {phase === 'upcoming' && !isRegistered ? (
         <div>
-          <button
-            onClick={handleRegister}
-            disabled={registering}
-            className="rounded-md border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-          >
+          <button onClick={handleRegister} disabled={registering} className="btn-primary">
             {registering ? 'Registering…' : 'Register'}
           </button>
           {registerError ? (
@@ -239,10 +235,10 @@ export default function ContestDetailPage() {
                 <li key={p.slug}>
                   <button
                     onClick={() => selectProblem(p)}
-                    className={`rounded-md border px-3 py-2 font-mono text-sm ${
+                    className={`rounded-md border-2 px-3 py-2 font-mono text-sm font-bold ${
                       selectedProblem?.slug === p.slug
-                        ? 'border-accent bg-accent/10 text-accent'
-                        : 'border-line text-ink hover:border-ink'
+                        ? 'border-ink bg-surface2 text-ink'
+                        : 'border-line bg-transparent text-ink/70 hover:border-ink hover:text-ink'
                     }`}
                   >
                     {p.title}
@@ -255,24 +251,16 @@ export default function ContestDetailPage() {
           {selectedProblem ? (
             <div className="flex flex-col gap-4">
               <div className="flex justify-center gap-2">
-                <button
-                  onClick={handleRun}
-                  disabled={running}
-                  className="rounded-md border border-line px-6 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
-                >
+                <button onClick={handleRun} disabled={running} className="btn-secondary">
                   {running ? 'Running…' : 'Run'}
                 </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="rounded-md border border-accent bg-accent/10 px-6 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-                >
+                <button onClick={handleSubmit} disabled={submitting} className="btn-primary">
                   {submitting ? 'Submitting…' : 'Submit'}
                 </button>
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <div className="flex flex-col gap-2">
+                <div className="panel flex flex-col gap-2 p-4">
                   <div className="flex items-center justify-end">
                     {submissionView ? (
                       <VerdictBadge

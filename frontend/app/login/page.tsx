@@ -65,11 +65,7 @@ function LoginForm() {
           />
         </label>
         {error ? <ErrorState message={error} /> : null}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-md border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-        >
+        <button type="submit" disabled={submitting} className="btn-primary">
           {submitting ? 'Logging in…' : 'Log in'}
         </button>
       </form>

@@ -53,20 +53,24 @@ export default function StyleguidePage() {
       <div>
         <h1 className="font-display text-3xl font-bold text-ink">CodeArena Styleguide</h1>
         <p className="mt-2 max-w-2xl font-body text-sm text-ink/70">
-          &ldquo;Judge Slip&rdquo; direction — tokens, type, and every shared component state. This
-          page ships to production as the living design-system reference; every later slice
+          &ldquo;Judge Slip — Mono&rdquo; direction — a near-black canvas with plain white-outline
+          chrome (no filled/colored buttons or chips) and a typewriter voice throughout. Verdict
+          colors are the one place color survives — they carry pass/fail meaning, not decoration.
+          This page ships to production as the living design-system reference; every later slice
           inherits from it. Every bordered box uses a rounded corner (<code>rounded-md</code> for
-          chips/inputs, <code>rounded-lg</code> for panels/cards/tables) — keep new boxes rounded too.
+          chips/inputs, <code>rounded-lg</code>/<code>rounded-xl</code> for panels/cards/tables) —
+          keep new boxes rounded too.
         </p>
       </div>
 
       <Section title="Colors">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-5">
-          <Swatch name="canvas" className="bg-canvas" hex="#0E1113" />
-          <Swatch name="surface" className="bg-surface" hex="#171B1E" />
-          <Swatch name="ink" className="bg-ink" hex="#E4E7E6" />
-          <Swatch name="line" className="bg-line" hex="#3A4045" />
-          <Swatch name="accent" className="bg-accent" hex="#3E7CB8" />
+          <Swatch name="canvas" className="bg-canvas" hex="#0A0A0A" />
+          <Swatch name="surface" className="bg-surface" hex="#141414" />
+          <Swatch name="surface2" className="bg-surface2" hex="#1C1C1C" />
+          <Swatch name="ink" className="bg-ink" hex="#F2F2F2" />
+          <Swatch name="line" className="bg-line" hex="#ADADAD" />
+          <Swatch name="accent" className="bg-accent" hex="#5B90C4" />
           <Swatch name="verdict-ac" className="bg-verdict-ac" hex="#4FA875" />
           <Swatch name="verdict-wa / re" className="bg-verdict-wa" hex="#C6553D" />
           <Swatch name="verdict-tle / mle" className="bg-verdict-tle" hex="#C98A3B" />
@@ -76,32 +80,26 @@ export default function StyleguidePage() {
 
       <Section title="Type scale">
         <div className="flex flex-col gap-3">
-          <p className="font-display text-3xl font-bold text-ink">Display 3xl — Space Grotesk</p>
+          <p className="font-display text-3xl font-bold text-ink">Display 3xl — Courier Prime</p>
           <p className="font-display text-xl font-bold text-ink">Display xl — page/section headings</p>
           <p className="font-body text-base text-ink">
-            Body base — IBM Plex Sans. Problem statements, form labels, and general prose render in
-            this face at 16px with relaxed line height for long-form reading.
+            Body base — Courier Prime. Problem statements, form labels, and general prose render in
+            this typewriter face at 16px — the whole app speaks in one monospace voice now, judge-slip
+            style.
           </p>
           <p className="font-body text-sm text-ink/70">Body sm — secondary/meta text, timestamps, counts.</p>
-          <p className="font-mono text-sm text-ink">Mono sm — IBM Plex Mono. Code, test I/O, verdict labels.</p>
+          <p className="font-mono text-sm text-ink">Mono sm — JetBrains Mono. Code, test I/O, verdict labels.</p>
         </div>
       </Section>
 
       <Section title="Buttons & inputs">
         <div className="flex flex-wrap items-center gap-4">
-          <button className="rounded-md border border-accent bg-accent/10 px-3 py-1.5 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20">
-            Primary
-          </button>
-          <button className="rounded-md border border-line px-3 py-1.5 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink">
-            Secondary
-          </button>
-          <button disabled className="rounded-md border border-line px-3 py-1.5 font-mono text-sm uppercase tracking-wide text-ink/40">
+          <button className="btn-primary">Primary</button>
+          <button className="btn-secondary">Secondary</button>
+          <button disabled className="btn-primary">
             Disabled
           </button>
-          <input
-            placeholder="handle"
-            className="rounded-md border border-line bg-transparent px-3 py-1.5 font-mono text-sm text-ink placeholder:text-ink/40"
-          />
+          <input placeholder="handle" className="placeholder:text-ink/40" />
         </div>
       </Section>
 

@@ -13,24 +13,22 @@ export function MonacoEditorPanel({
   onChange: (value: string) => void;
 }) {
   return (
-    <div>
-      <label className="mb-2 block font-mono text-sm text-ink">
-        Language:{' '}
-        <select value="cpp" disabled className="rounded-md border border-line bg-transparent p-1 text-ink">
+    <div className="panel overflow-hidden">
+      <div className="panel-header flex items-center justify-between">
+        <span>Editor</span>
+        <select value="cpp" disabled className="rounded-md border border-line bg-canvas px-2 py-1 text-xs font-mono normal-case text-ink">
           <option value="cpp">C++</option>
         </select>
-      </label>
-      <div className="overflow-hidden rounded-lg border border-line">
-        <Editor
-          height="400px"
-          language="cpp"
-          theme={JUDGE_SLIP_MONACO_THEME}
-          beforeMount={defineJudgeSlipTheme}
-          value={code}
-          onChange={(value) => onChange(value ?? '')}
-          options={{ fontFamily: 'var(--font-mono)', fontLigatures: false }}
-        />
       </div>
+      <Editor
+        height="400px"
+        language="cpp"
+        theme={JUDGE_SLIP_MONACO_THEME}
+        beforeMount={defineJudgeSlipTheme}
+        value={code}
+        onChange={(value) => onChange(value ?? '')}
+        options={{ fontFamily: 'var(--font-mono)', fontLigatures: false }}
+      />
     </div>
   );
 }

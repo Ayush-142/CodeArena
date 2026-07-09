@@ -6,3 +6,32 @@ body {
   margin: 0;
   @apply bg-canvas text-ink font-body;
 }
+
+/* "Judge Slip — Mono" shared primitives — every button/panel/chip in the app should
+   use one of these instead of hand-rolling border/bg combinations. Chrome (buttons, nav,
+   meta chips) is plain white-outline-on-black, no fill/color — verdict colors are the
+   one place color survives, since they carry pass/fail meaning. Standing instruction:
+   everything rounded. */
+@layer components {
+  .btn-primary,
+  .btn-secondary {
+    @apply rounded-xl border-2 border-line bg-transparent px-5 py-2 font-display text-sm font-bold uppercase tracking-wide text-ink transition hover:bg-surface2 hover:border-ink disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-small {
+    @apply rounded-lg border-2 border-line bg-transparent px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink transition hover:border-ink hover:bg-surface2;
+  }
+  .panel {
+    @apply rounded-xl border-2 border-line bg-surface;
+  }
+  .panel-header {
+    @apply rounded-t-lg border-b-2 border-line bg-surface2 px-3 py-1.5 font-mono text-xs font-bold uppercase tracking-widest text-ink;
+  }
+  .chip,
+  .chip-sage {
+    @apply rounded-lg border-2 border-line bg-transparent px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink;
+  }
+  input,
+  textarea {
+    @apply rounded-md border border-line bg-canvas p-2 font-body text-ink;
+  }
+}

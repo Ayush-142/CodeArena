@@ -9,10 +9,10 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 
-const DIFFICULTY_STYLES: Record<ProblemSummary['difficulty'], string> = {
-  easy: 'border-verdict-ac text-verdict-ac',
-  medium: 'border-verdict-tle text-verdict-tle',
-  hard: 'border-verdict-wa text-verdict-wa',
+const DIFFICULTY_LABELS: Record<ProblemSummary['difficulty'], string> = {
+  easy: '🟢',
+  medium: '🏆',
+  hard: '🔥',
 };
 
 export default function ProblemsPage() {
@@ -52,8 +52,8 @@ export default function ProblemsPage() {
           {problems.map((p, i) => (
             <li
               key={p._id}
-              className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-3 ${
-                p.solved ? 'border-verdict-ac bg-verdict-ac/10' : 'border-line hover:border-ink'
+              className={`flex items-center justify-between gap-4 rounded-lg border-2 bg-surface px-4 py-3 ${
+                p.solved ? 'border-verdict-ac bg-verdict-ac/15' : 'border-line hover:border-ink'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -62,10 +62,8 @@ export default function ProblemsPage() {
                   {p.title}
                 </Link>
               </div>
-              <span
-                className={`rounded-md border px-2 py-1 font-mono text-xs uppercase ${DIFFICULTY_STYLES[p.difficulty]}`}
-              >
-                {p.difficulty}
+              <span className="chip">
+                {DIFFICULTY_LABELS[p.difficulty]} {p.difficulty}
               </span>
             </li>
           ))}

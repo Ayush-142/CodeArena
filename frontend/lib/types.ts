@@ -39,6 +39,9 @@ export interface ProblemDetail {
   timeLimitMs: number;
   memoryLimitMb: number;
   samples: ProblemSample[];
+  // true if the caller has at least one AC submission for this problem; always false when
+  // unauthenticated (never omitted — same shape either way).
+  solved: boolean;
 }
 
 // api/src/models/Submission.ts VERDICTS

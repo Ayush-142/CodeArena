@@ -76,6 +76,15 @@ problemsRouter.get(
     if (!problem) {
       throw new AppError(404, 'NOT_FOUND', 'not found');
     }
-    res.json(problem);
+
+    // Same solved-status convention as GET / — attachUser runs globally, so req.user is
+    // only unset for genuinely anonymous requests, which just get solved:false.
+    let solved = false;
+    if (req.user) {
+      const ac = await Submission.exists({ userId: req.user.userId, problemId: problem._id, status: 'AC' });
+      solved = ac !== null;
+    }
+
+    res.json({ ...problem, solved });
   }),
 );

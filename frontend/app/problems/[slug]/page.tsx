@@ -25,10 +25,10 @@ const HINT_ELIGIBLE_STATUSES: SubmissionStatus[] = ['WA', 'TLE', 'RE', 'MLE'];
 
 type LeftTab = 'description' | 'submissions';
 
-const DIFFICULTY_STYLES: Record<ProblemDetail['difficulty'], string> = {
-  easy: 'border-verdict-ac text-verdict-ac',
-  medium: 'border-verdict-tle text-verdict-tle',
-  hard: 'border-verdict-wa text-verdict-wa',
+const DIFFICULTY_LABELS: Record<ProblemDetail['difficulty'], string> = {
+  easy: '🟢',
+  medium: '🏆',
+  hard: '🔥',
 };
 
 interface SubmissionView {
@@ -49,8 +49,8 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`border-b-2 px-0.5 py-1.5 font-mono text-sm uppercase tracking-wide ${
-        active ? 'border-accent text-ink' : 'border-transparent text-ink/50 hover:text-ink'
+      className={`rounded-md px-3 py-1 font-mono text-sm font-bold uppercase tracking-wide ${
+        active ? 'bg-canvas text-ink shadow-emboss' : 'text-ink/50 hover:text-ink'
       }`}
     >
       {children}
@@ -111,6 +111,9 @@ export default function ProblemSolvingPage() {
       setSubmissionView({ status: data.status, failedTestIndex: data.failedTestIndex, execTimeMs: data.execTimeMs });
       if (TERMINAL_STATUSES.includes(data.status)) {
         setHistoryRefreshKey((k) => k + 1);
+        if (data.status === 'AC') {
+          setProblem((p) => (p ? { ...p, solved: true } : p));
+        }
         if (oneShotTimerRef.current) {
           clearTimeout(oneShotTimerRef.current);
           oneShotTimerRef.current = null;
@@ -205,31 +208,19 @@ export default function ProblemSolvingPage() {
       <div>
         <h1 className="font-display text-xl font-bold text-ink">{problem.title}</h1>
         <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
-          <span className={`rounded-md border px-2 py-1 uppercase ${DIFFICULTY_STYLES[problem.difficulty]}`}>
-            {problem.difficulty}
+          <span className="chip">
+            {DIFFICULTY_LABELS[problem.difficulty]} {problem.difficulty}
           </span>
-          <span className="rounded-md border border-line px-2 py-1 text-ink/70">
-            time limit {problem.timeLimitMs}ms
-          </span>
-          <span className="rounded-md border border-line px-2 py-1 text-ink/70">
-            memory limit {problem.memoryLimitMb}MB
-          </span>
+          <span className="chip">⏱ time limit {problem.timeLimitMs}ms</span>
+          <span className="chip">▤ memory limit {problem.memoryLimitMb}MB</span>
         </div>
       </div>
 
       <div className="flex justify-center gap-2">
-        <button
-          onClick={handleRun}
-          disabled={running}
-          className="rounded-md border border-line px-6 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
-        >
+        <button onClick={handleRun} disabled={running} className="btn-secondary">
           {running ? 'Running…' : 'Run'}
         </button>
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="rounded-md border border-accent bg-accent/10 px-6 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-        >
+        <button onClick={handleSubmit} disabled={submitting} className="btn-primary">
           {submitting ? 'Submitting…' : 'Submit'}
         </button>
       </div>
@@ -238,9 +229,9 @@ export default function ProblemSolvingPage() {
         storageKey="codearena:solving-split-ratio"
         defaultRatio={50}
         left={
-          <div className="flex h-full flex-col gap-4 pr-0 md:pr-4">
-            <div className="flex items-center justify-between border-b border-line">
-              <div className="flex gap-4">
+          <div className="panel flex h-full flex-col overflow-hidden">
+            <div className="flex items-center justify-between bg-surface2 border-b-2 border-line px-2 py-1.5">
+              <div className="flex items-center gap-1">
                 <TabButton active={leftTab === 'description'} onClick={() => setLeftTab('description')}>
                   Description
                 </TabButton>
@@ -257,35 +248,49 @@ export default function ProblemSolvingPage() {
               ) : null}
             </div>
 
-            {leftTab === 'description' ? (
-              <div className="flex flex-col gap-4">
-                <MarkdownStatement statementMd={problem.statementMd} />
-                <div>
-                  <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
-                  {problem.samples.map((sample, i) => (
-                    <div key={i} className="mb-2 flex flex-col gap-2">
-                      <div>
-                        <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Input</p>
-                        <pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface p-2 font-mono text-sm text-ink">
-                          {sample.input}
-                        </pre>
+            <div className="flex-1 overflow-auto p-4">
+              {leftTab === 'description' ? (
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-display text-lg font-bold text-ink">{problem.title}</h2>
+                    {problem.solved ? (
+                      <span className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wide text-verdict-ac">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-verdict-ac">
+                          ✓
+                        </span>
+                        Solved
+                      </span>
+                    ) : null}
+                  </div>
+                  <MarkdownStatement statementMd={problem.statementMd} />
+                  <div>
+                    <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
+                    {problem.samples.map((sample, i) => (
+                      <div key={i} className="mb-4 flex flex-col gap-2">
+                        <div>
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="font-display text-sm font-bold uppercase tracking-wide text-ink">Input</span>
+                            <span className="flex h-5 w-5 items-center justify-center rounded border border-line text-[10px] font-bold">
+                              {i + 1}
+                            </span>
+                          </div>
+                          <pre className="whitespace-pre-wrap font-mono text-sm text-ink">{sample.input}</pre>
+                        </div>
+                        <div>
+                          <span className="font-display text-sm font-bold uppercase tracking-wide text-ink">Output</span>
+                          <pre className="whitespace-pre-wrap font-mono text-sm text-ink">{sample.output}</pre>
+                        </div>
                       </div>
-                      <div>
-                        <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Output</p>
-                        <pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface p-2 font-mono text-sm text-ink">
-                          {sample.output}
-                        </pre>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div>
-                <h2 className="mb-2 font-display font-bold text-ink">My Submissions</h2>
-                <SubmissionHistory slug={slug} refreshKey={historyRefreshKey} />
-              </div>
-            )}
+              ) : (
+                <div>
+                  <h2 className="mb-2 font-display font-bold text-ink">My Submissions</h2>
+                  <SubmissionHistory slug={slug} refreshKey={historyRefreshKey} />
+                </div>
+              )}
+            </div>
           </div>
         }
         right={

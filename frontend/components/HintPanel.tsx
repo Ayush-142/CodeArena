@@ -102,10 +102,7 @@ export function HintPanel({ submissionId, problemSlug }: { submissionId: string;
       {errorMessage ? <p className="font-mono text-sm text-verdict-tle">{errorMessage}</p> : null}
 
       {nextLevel && streamingLevel === null ? (
-        <button
-          onClick={() => handleRequest(nextLevel)}
-          className="self-start rounded-md border border-accent bg-accent/10 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-accent hover:bg-accent/20"
-        >
+        <button onClick={() => handleRequest(nextLevel)} className="btn-primary self-start !px-3 !py-1.5 !text-xs">
           Get Level {nextLevel} Hint ({LEVEL_LABELS[nextLevel]})
         </button>
       ) : null}
