@@ -9,6 +9,7 @@ import { MonacoEditorPanel } from '@/components/MonacoEditorPanel';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { HintPanel } from '@/components/HintPanel';
 import { SubmissionHistory } from '@/components/SubmissionHistory';
+import { ResizableSplit } from '@/components/ResizableSplit';
 import { ApiError, createSubmission, getProblem, getRetryAfterSeconds, getSubmission } from '@/lib/api';
 import type { ProblemDetail, SubmissionStatus, VerdictClientEvent } from '@/lib/types';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
@@ -20,10 +21,33 @@ const TERMINAL_STATUSES: SubmissionStatus[] = ['AC', 'WA', 'TLE', 'MLE', 'RE', '
 // these; CE is a different failure class (nothing ran) and stays out of scope.
 const HINT_ELIGIBLE_STATUSES: SubmissionStatus[] = ['WA', 'TLE', 'RE', 'MLE'];
 
+type LeftTab = 'description' | 'submissions';
+
 interface SubmissionView {
   status: SubmissionStatus;
   failedTestIndex?: number;
   execTimeMs?: number;
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`border-b-2 px-0.5 py-1.5 font-mono text-sm uppercase tracking-wide ${
+        active ? 'border-accent text-ink' : 'border-transparent text-ink/50 hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function ProblemSolvingPage() {
@@ -42,6 +66,7 @@ export default function ProblemSolvingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [leftTab, setLeftTab] = useState<LeftTab>('description');
 
   useDocumentTitle(problem?.title ?? 'Problem');
 
@@ -61,6 +86,7 @@ export default function ProblemSolvingPage() {
     currentSubmissionIdRef.current = null;
     setSubmissionView(null);
     setSubmitError(null);
+    setLeftTab('description');
 
     getProblem(slug)
       .then(setProblem)
@@ -124,6 +150,7 @@ export default function ProblemSolvingPage() {
       currentSubmissionIdRef.current = res.id;
       setCurrentSubmissionId(res.id);
       setSubmissionView({ status: 'queued' });
+      setLeftTab('submissions');
 
       if (oneShotTimerRef.current) clearTimeout(oneShotTimerRef.current);
       oneShotTimerRef.current = setTimeout(() => {
@@ -156,68 +183,83 @@ export default function ProblemSolvingPage() {
   }
 
   return (
-    <main className="flex flex-col gap-6 p-4">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Left pane: statement + samples */}
-        <div className="flex flex-col gap-4">
-          <div>
-            <h1 className="font-display text-xl font-bold text-ink">{problem.title}</h1>
-            <p className="font-mono text-sm text-ink/60">
-              {problem.difficulty} · time limit {problem.timeLimitMs}ms · memory limit {problem.memoryLimitMb}MB
-            </p>
-          </div>
+    <main className="flex flex-1 flex-col gap-4 p-4">
+      <div>
+        <h1 className="font-display text-xl font-bold text-ink">{problem.title}</h1>
+        <p className="font-mono text-sm text-ink/60">
+          {problem.difficulty} · time limit {problem.timeLimitMs}ms · memory limit {problem.memoryLimitMb}MB
+        </p>
+      </div>
 
-          <MarkdownStatement statementMd={problem.statementMd} />
+      <ResizableSplit
+        storageKey="codearena:solving-split-ratio"
+        defaultRatio={50}
+        left={
+          <div className="flex h-full flex-col gap-4 pr-0 md:pr-4">
+            <div className="flex gap-4 border-b border-line">
+              <TabButton active={leftTab === 'description'} onClick={() => setLeftTab('description')}>
+                Description
+              </TabButton>
+              <TabButton active={leftTab === 'submissions'} onClick={() => setLeftTab('submissions')}>
+                Submissions
+              </TabButton>
+            </div>
 
-          <div>
-            <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
-            {problem.samples.map((sample, i) => (
-              <div key={i} className="mb-2 grid grid-cols-2 gap-2">
-                <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
-                  {sample.input}
-                </pre>
-                <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
-                  {sample.output}
-                </pre>
+            {leftTab === 'description' ? (
+              <div className="flex flex-col gap-4">
+                <MarkdownStatement statementMd={problem.statementMd} />
+                <div>
+                  <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
+                  {problem.samples.map((sample, i) => (
+                    <div key={i} className="mb-2 grid grid-cols-2 gap-2">
+                      <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                        {sample.input}
+                      </pre>
+                      <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                        {sample.output}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right pane: editor, submit, verdict, hints */}
-        <div className="flex flex-col gap-4">
-          <MonacoEditorPanel code={code} onChange={setCode} />
-
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-            >
-              {submitting ? 'Submitting…' : 'Submit'}
-            </button>
-            {submitError ? <ErrorState message={submitError} /> : null}
-            {submissionView ? (
+            ) : (
               <div>
-                <VerdictBadge
-                  status={submissionView.status}
-                  failedTestIndex={submissionView.failedTestIndex}
-                  execTimeMs={submissionView.execTimeMs}
-                />
+                <h2 className="mb-2 font-display font-bold text-ink">My Submissions</h2>
+                <SubmissionHistory slug={slug} refreshKey={historyRefreshKey} />
               </div>
+            )}
+          </div>
+        }
+        right={
+          <div className="flex h-full flex-col gap-4 pl-0 md:pl-4">
+            <MonacoEditorPanel code={code} onChange={setCode} />
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+              >
+                {submitting ? 'Submitting…' : 'Submit'}
+              </button>
+              {submitError ? <ErrorState message={submitError} /> : null}
+              {submissionView ? (
+                <div>
+                  <VerdictBadge
+                    status={submissionView.status}
+                    failedTestIndex={submissionView.failedTestIndex}
+                    execTimeMs={submissionView.execTimeMs}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {submissionView && currentSubmissionId && HINT_ELIGIBLE_STATUSES.includes(submissionView.status) ? (
+              <HintPanel submissionId={currentSubmissionId} problemSlug={slug} />
             ) : null}
           </div>
-
-          {submissionView && currentSubmissionId && HINT_ELIGIBLE_STATUSES.includes(submissionView.status) ? (
-            <HintPanel submissionId={currentSubmissionId} problemSlug={slug} />
-          ) : null}
-        </div>
-      </div>
-
-      <div>
-        <h2 className="mb-2 font-display font-bold text-ink">My Submissions</h2>
-        <SubmissionHistory slug={slug} refreshKey={historyRefreshKey} />
-      </div>
+        }
+      />
     </main>
   );
 }
