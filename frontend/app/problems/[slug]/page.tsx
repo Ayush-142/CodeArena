@@ -10,9 +10,11 @@ import { VerdictBadge } from '@/components/VerdictBadge';
 import { HintPanel } from '@/components/HintPanel';
 import { SubmissionHistory } from '@/components/SubmissionHistory';
 import { ResizableSplit } from '@/components/ResizableSplit';
+import { RunConsole } from '@/components/RunConsole';
 import { ApiError, createSubmission, getProblem, getRetryAfterSeconds, getSubmission } from '@/lib/api';
 import type { ProblemDetail, SubmissionStatus, VerdictClientEvent } from '@/lib/types';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { useRunOnSamples } from '@/lib/useRunOnSamples';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 
@@ -73,6 +75,8 @@ export default function ProblemSolvingPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [leftTab, setLeftTab] = useState<LeftTab>('description');
+
+  const { run, submitting: running, error: runError, stalled: runStalled, startRun } = useRunOnSamples();
 
   useDocumentTitle(problem?.title ?? 'Problem');
 
@@ -177,6 +181,14 @@ export default function ProblemSolvingPage() {
     }
   }
 
+  function handleRun() {
+    if (authStatus !== 'authenticated') {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    void startRun(slug, code);
+  }
+
   if (problemError) return <main className="p-4"><ErrorState message={problemError} /></main>;
   if (!problem) {
     return (
@@ -255,13 +267,24 @@ export default function ProblemSolvingPage() {
             <MonacoEditorPanel code={code} onChange={setCode} />
 
             <div className="flex flex-col gap-2">
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-              >
-                {submitting ? 'Submitting…' : 'Submit'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRun}
+                  disabled={running}
+                  className="self-start border border-line px-4 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
+                >
+                  {running ? 'Running…' : 'Run'}
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+                >
+                  {submitting ? 'Submitting…' : 'Submit'}
+                </button>
+              </div>
+              {runError ? <ErrorState message={runError} /> : null}
+              {run ? <RunConsole run={run} stalled={runStalled} /> : null}
               {submitError ? <ErrorState message={submitError} /> : null}
               {submissionView ? (
                 <div>

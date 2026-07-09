@@ -9,6 +9,7 @@ import { MarkdownStatement } from '@/components/MarkdownStatement';
 import { MonacoEditorPanel } from '@/components/MonacoEditorPanel';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { CountdownTimer } from '@/components/CountdownTimer';
+import { RunConsole } from '@/components/RunConsole';
 import {
   ApiError,
   createSubmission,
@@ -19,6 +20,7 @@ import {
 } from '@/lib/api';
 import type { ContestDetailResponse, ProblemDetail, SubmissionStatus, VerdictClientEvent } from '@/lib/types';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { useRunOnSamples } from '@/lib/useRunOnSamples';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 
@@ -48,6 +50,8 @@ export default function ContestDetailPage() {
   const [submissionView, setSubmissionView] = useState<SubmissionView | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const { run, submitting: running, error: runError, stalled: runStalled, startRun, reset: resetRun } = useRunOnSamples();
 
   useDocumentTitle(data?.contest.title ?? 'Contest');
 
@@ -104,6 +108,7 @@ export default function ContestDetailPage() {
     currentSubmissionIdRef.current = null;
     setSubmissionView(null);
     setSubmitError(null);
+    resetRun();
   }
 
   async function handleRegister() {
@@ -160,6 +165,15 @@ export default function ContestDetailPage() {
       idempotencyKeyRef.current = null;
       setSubmitting(false);
     }
+  }
+
+  function handleRun() {
+    if (!selectedProblem) return;
+    if (authStatus !== 'authenticated') {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    void startRun(selectedProblem.slug, code, id);
   }
 
   if (error) return <main className="p-4"><ErrorState message={error} /></main>;
@@ -244,13 +258,24 @@ export default function ContestDetailPage() {
               <div className="flex flex-col gap-4">
                 <MonacoEditorPanel code={code} onChange={setCode} />
                 <div className="flex flex-col gap-2">
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-                  >
-                    {submitting ? 'Submitting…' : 'Submit'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleRun}
+                      disabled={running}
+                      className="self-start border border-line px-4 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
+                    >
+                      {running ? 'Running…' : 'Run'}
+                    </button>
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitting}
+                      className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+                    >
+                      {submitting ? 'Submitting…' : 'Submit'}
+                    </button>
+                  </div>
+                  {runError ? <ErrorState message={runError} /> : null}
+                  {run ? <RunConsole run={run} stalled={runStalled} /> : null}
                   {submitError ? <ErrorState message={submitError} /> : null}
                   {submissionView ? (
                     <div>
