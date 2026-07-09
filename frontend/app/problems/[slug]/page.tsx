@@ -217,6 +217,23 @@ export default function ProblemSolvingPage() {
         </div>
       </div>
 
+      <div className="flex justify-center gap-2">
+        <button
+          onClick={handleRun}
+          disabled={running}
+          className="border border-line px-6 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
+        >
+          {running ? 'Running…' : 'Run'}
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="border border-accent bg-accent/10 px-6 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+        >
+          {submitting ? 'Submitting…' : 'Submit'}
+        </button>
+      </div>
+
       <ResizableSplit
         storageKey="codearena:solving-split-ratio"
         defaultRatio={50}
@@ -267,22 +284,6 @@ export default function ProblemSolvingPage() {
             <MonacoEditorPanel code={code} onChange={setCode} />
 
             <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <button
-                  onClick={handleRun}
-                  disabled={running}
-                  className="self-start border border-line px-4 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
-                >
-                  {running ? 'Running…' : 'Run'}
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="self-start border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
-                >
-                  {submitting ? 'Submitting…' : 'Submit'}
-                </button>
-              </div>
               {runError ? <ErrorState message={runError} /> : null}
               {run ? <RunConsole run={run} stalled={runStalled} /> : null}
               {submitError ? <ErrorState message={submitError} /> : null}
