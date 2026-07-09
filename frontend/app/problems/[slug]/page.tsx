@@ -221,14 +221,14 @@ export default function ProblemSolvingPage() {
         <button
           onClick={handleRun}
           disabled={running}
-          className="border border-line px-6 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
+          className="rounded-md border border-line px-6 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
         >
           {running ? 'Running…' : 'Run'}
         </button>
         <button
           onClick={handleSubmit}
           disabled={submitting}
-          className="border border-accent bg-accent/10 px-6 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+          className="rounded-md border border-accent bg-accent/10 px-6 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
         >
           {submitting ? 'Submitting…' : 'Submit'}
         </button>
@@ -239,13 +239,22 @@ export default function ProblemSolvingPage() {
         defaultRatio={50}
         left={
           <div className="flex h-full flex-col gap-4 pr-0 md:pr-4">
-            <div className="flex gap-4 border-b border-line">
-              <TabButton active={leftTab === 'description'} onClick={() => setLeftTab('description')}>
-                Description
-              </TabButton>
-              <TabButton active={leftTab === 'submissions'} onClick={() => setLeftTab('submissions')}>
-                Submissions
-              </TabButton>
+            <div className="flex items-center justify-between border-b border-line">
+              <div className="flex gap-4">
+                <TabButton active={leftTab === 'description'} onClick={() => setLeftTab('description')}>
+                  Description
+                </TabButton>
+                <TabButton active={leftTab === 'submissions'} onClick={() => setLeftTab('submissions')}>
+                  Submissions
+                </TabButton>
+              </div>
+              {submissionView ? (
+                <VerdictBadge
+                  status={submissionView.status}
+                  failedTestIndex={submissionView.failedTestIndex}
+                  execTimeMs={submissionView.execTimeMs}
+                />
+              ) : null}
             </div>
 
             {leftTab === 'description' ? (
@@ -254,16 +263,16 @@ export default function ProblemSolvingPage() {
                 <div>
                   <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
                   {problem.samples.map((sample, i) => (
-                    <div key={i} className="mb-2 grid grid-cols-2 gap-2">
+                    <div key={i} className="mb-2 flex flex-col gap-2">
                       <div>
                         <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Input</p>
-                        <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                        <pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface p-2 font-mono text-sm text-ink">
                           {sample.input}
                         </pre>
                       </div>
                       <div>
                         <p className="mb-1 font-mono text-xs uppercase tracking-wide text-ink/50">Output</p>
-                        <pre className="whitespace-pre-wrap border border-line bg-surface p-2 font-mono text-sm text-ink">
+                        <pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface p-2 font-mono text-sm text-ink">
                           {sample.output}
                         </pre>
                       </div>
@@ -287,15 +296,6 @@ export default function ProblemSolvingPage() {
               {runError ? <ErrorState message={runError} /> : null}
               {run ? <RunConsole run={run} stalled={runStalled} /> : null}
               {submitError ? <ErrorState message={submitError} /> : null}
-              {submissionView ? (
-                <div>
-                  <VerdictBadge
-                    status={submissionView.status}
-                    failedTestIndex={submissionView.failedTestIndex}
-                    execTimeMs={submissionView.execTimeMs}
-                  />
-                </div>
-              ) : null}
             </div>
 
             {submissionView && currentSubmissionId && HINT_ELIGIBLE_STATUSES.includes(submissionView.status) ? (

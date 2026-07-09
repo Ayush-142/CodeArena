@@ -210,7 +210,7 @@ export default function ContestDetailPage() {
           <button
             onClick={handleRegister}
             disabled={registering}
-            className="border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+            className="rounded-md border border-accent bg-accent/10 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
           >
             {registering ? 'Registering…' : 'Register'}
           </button>
@@ -239,7 +239,7 @@ export default function ContestDetailPage() {
                 <li key={p.slug}>
                   <button
                     onClick={() => selectProblem(p)}
-                    className={`border px-3 py-2 font-mono text-sm ${
+                    className={`rounded-md border px-3 py-2 font-mono text-sm ${
                       selectedProblem?.slug === p.slug
                         ? 'border-accent bg-accent/10 text-accent'
                         : 'border-line text-ink hover:border-ink'
@@ -258,36 +258,38 @@ export default function ContestDetailPage() {
                 <button
                   onClick={handleRun}
                   disabled={running}
-                  className="border border-line px-6 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
+                  className="rounded-md border border-line px-6 py-2 font-mono text-sm uppercase tracking-wide text-ink hover:border-ink disabled:opacity-40"
                 >
                   {running ? 'Running…' : 'Run'}
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={submitting}
-                  className="border border-accent bg-accent/10 px-6 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
+                  className="rounded-md border border-accent bg-accent/10 px-6 py-2 font-mono text-sm font-semibold uppercase tracking-wide text-accent hover:bg-accent/20 disabled:opacity-40"
                 >
                   {submitting ? 'Submitting…' : 'Submit'}
                 </button>
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <MarkdownStatement statementMd={selectedProblem.statementMd} />
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-end">
+                    {submissionView ? (
+                      <VerdictBadge
+                        status={submissionView.status}
+                        failedTestIndex={submissionView.failedTestIndex}
+                        execTimeMs={submissionView.execTimeMs}
+                      />
+                    ) : null}
+                  </div>
+                  <MarkdownStatement statementMd={selectedProblem.statementMd} />
+                </div>
                 <div className="flex flex-col gap-4">
                   <MonacoEditorPanel code={code} onChange={setCode} />
                   <div className="flex flex-col gap-2">
                     {runError ? <ErrorState message={runError} /> : null}
                     {run ? <RunConsole run={run} stalled={runStalled} /> : null}
                     {submitError ? <ErrorState message={submitError} /> : null}
-                    {submissionView ? (
-                      <div>
-                        <VerdictBadge
-                          status={submissionView.status}
-                          failedTestIndex={submissionView.failedTestIndex}
-                          execTimeMs={submissionView.execTimeMs}
-                        />
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               </div>
