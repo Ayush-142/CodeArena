@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { getProblemSubmissions } from '@/lib/api';
 import type { SubmissionHistoryItem } from '@/lib/types';
 import { VerdictBadge } from './VerdictBadge';
+import { Skeleton } from './ui/Skeleton';
+import { ErrorState } from './ui/ErrorState';
+import { EmptyState } from './ui/EmptyState';
 
 export function SubmissionHistory({ slug, refreshKey }: { slug: string; refreshKey: number }) {
   const [items, setItems] = useState<SubmissionHistoryItem[] | null>(null);
@@ -23,29 +26,36 @@ export function SubmissionHistory({ slug, refreshKey }: { slug: string; refreshK
     };
   }, [slug, refreshKey]);
 
-  if (error) return <p>{error}</p>;
-  if (!items) return <p>Loading history…</p>;
-  if (items.length === 0) return <p>No submissions yet.</p>;
+  if (error) return <ErrorState message={error} />;
+  if (!items) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-5 w-full" />
+        <Skeleton className="h-5 w-full" />
+      </div>
+    );
+  }
+  if (items.length === 0) return <EmptyState message="No submissions yet." />;
 
   return (
-    <table className="w-full text-left text-sm">
+    <table className="w-full border-collapse text-left font-mono text-sm text-ink">
       <thead>
-        <tr>
-          <th className="pr-4">Status</th>
-          <th className="pr-4">When</th>
-          <th className="pr-4">Time</th>
-          <th>Language</th>
+        <tr className="border-b border-line text-ink/60">
+          <th className="py-1 pr-4 font-normal">Status</th>
+          <th className="py-1 pr-4 font-normal">When</th>
+          <th className="py-1 pr-4 font-normal">Time</th>
+          <th className="py-1 font-normal">Language</th>
         </tr>
       </thead>
       <tbody>
-        {items.map((item) => (
-          <tr key={item._id}>
-            <td className="pr-4">
-              <VerdictBadge status={item.status} execTimeMs={item.execTimeMs ?? undefined} />
+        {items.map((item, i) => (
+          <tr key={item._id} className={`border-b border-line ${i % 2 === 1 ? 'bg-surface/40' : ''}`}>
+            <td className="py-1.5 pr-4">
+              <VerdictBadge status={item.status} execTimeMs={item.execTimeMs ?? undefined} variant="chip" />
             </td>
-            <td className="pr-4">{new Date(item.createdAt).toLocaleString()}</td>
-            <td className="pr-4">{item.execTimeMs != null ? `${item.execTimeMs}ms` : '—'}</td>
-            <td>{item.language}</td>
+            <td className="py-1.5 pr-4">{new Date(item.createdAt).toLocaleString()}</td>
+            <td className="py-1.5 pr-4">{item.execTimeMs != null ? `${item.execTimeMs}ms` : '—'}</td>
+            <td className="py-1.5">{item.language}</td>
           </tr>
         ))}
       </tbody>
