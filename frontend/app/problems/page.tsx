@@ -10,9 +10,9 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 const DIFFICULTY_STYLES: Record<ProblemSummary['difficulty'], string> = {
-  easy: 'text-verdict-ac',
-  medium: 'text-verdict-tle',
-  hard: 'text-verdict-wa',
+  easy: 'border-verdict-ac text-verdict-ac',
+  medium: 'border-verdict-tle text-verdict-tle',
+  hard: 'border-verdict-wa text-verdict-wa',
 };
 
 export default function ProblemsPage() {
@@ -49,17 +49,22 @@ export default function ProblemsPage() {
         <EmptyState message="No problems yet." />
       ) : (
         <ul className="flex flex-col gap-2">
-          {problems.map((p) => (
-            <li key={p._id} className="border border-line px-3 py-2 hover:border-ink">
-              <Link href={`/problems/${p.slug}`} className="font-body text-ink underline">
-                {p.title}
-              </Link>{' '}
-              <span className={`font-mono text-xs uppercase ${DIFFICULTY_STYLES[p.difficulty]}`}>
+          {problems.map((p, i) => (
+            <li
+              key={p._id}
+              className="flex items-center justify-between gap-4 rounded-lg border border-line px-4 py-3 hover:border-ink"
+            >
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-sm text-ink/40">{i + 1}</span>
+                <Link href={`/problems/${p.slug}`} className="font-body text-ink underline">
+                  {p.title}
+                </Link>
+              </div>
+              <span
+                className={`rounded-md border px-2 py-1 font-mono text-xs uppercase ${DIFFICULTY_STYLES[p.difficulty]}`}
+              >
                 {p.difficulty}
               </span>
-              {p.tags.length ? (
-                <span className="ml-2 font-mono text-xs text-ink/50">{p.tags.join(', ')}</span>
-              ) : null}
             </li>
           ))}
         </ul>
