@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.next
+**/.cache
+.git
+*.tsbuildinfo
+coverage
+.env
+.env.local
+.env.*
+!.env.example
+!.env.production.example

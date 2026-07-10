@@ -1,0 +1,24 @@
+# Reverse proxy for the single-VM deploy — see docker-compose.prod.yml and DEPLOY.md.
+# DOMAIN comes from the compose environment (e.g. codearena-<name>.duckdns.org); Caddy issues
+# and renews a Let's Encrypt certificate for it automatically.
+#
+# Deliberately does NOT route /health, /ready, or /metrics — those stay reachable only inside
+# the compose network or via `curl localhost:PORT` over SSH on the VM itself, never through the
+# public domain (see api/src/routes/metrics.ts's comment on this same posture).
+
+{$DOMAIN} {
+	# Socket.io's handshake/upgrade path — must come before the general /api/* proxy below so
+	# it isn't shadowed by it (both target the same api:3001 container; kept as a distinct
+	# block for clarity and so WebSocket upgrade headers are scoped to only where they're needed).
+	handle /socket.io/* {
+		reverse_proxy api:3001
+	}
+
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

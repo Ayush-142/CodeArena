@@ -1,0 +1,7 @@
+{
+  "title": "Is It Prime?",
+  "difficulty": "easy",
+  "tags": ["math", "number-theory"],
+  "timeLimitMs": 1000,
+  "memoryLimitMb": 256
+}

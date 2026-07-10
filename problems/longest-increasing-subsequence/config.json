@@ -1,0 +1,7 @@
+{
+  "title": "Longest Increasing Subsequence",
+  "difficulty": "hard",
+  "tags": ["dp", "binary-search"],
+  "timeLimitMs": 2000,
+  "memoryLimitMb": 256
+}

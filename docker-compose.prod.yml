@@ -1,0 +1,137 @@
+# Production topology for the single-VM deploy (Azure B2s, 2 vCPU / 4GB RAM — see DEPLOY.md).
+# NOT a replacement for docker-compose.yml (that one stays the local dev infra-only file).
+#
+# Request path: browser --HTTPS--> caddy --> frontend:3000 (/) or api:3001 (/api/*, /socket.io/*).
+# Only `caddy` publishes ports to the host; every other service is reachable solely on the
+# internal `codearena` network. /health, /ready, /metrics are deliberately NOT routed by Caddy
+# (see Caddyfile) — reachable only inside this network or via `curl localhost:PORT` on the VM
+# itself, never through the public domain.
+#
+# mem_limits sum to ~2.24GB, leaving >1GB headroom under the 4GB box for judge-container bursts
+# (the judge sandboxes worker spawns are separate, short-lived containers capped by each
+# problem's own memoryLimitMb — not counted against `worker`'s own limit here) plus the OS,
+# backed by the 2GB swapfile DEPLOY.md has you create as a safety net.
+
+networks:
+  codearena:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  minio-data:
+  caddy-data:
+  caddy-config:
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    mem_limit: 512m
+    networks: [codearena]
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: codearena
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    networks: [codearena]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    restart: unless-stopped
+    mem_limit: 256m
+    command: server /data --console-address ":9001"
+    networks: [codearena]
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    mem_limit: 384m
+    networks: [codearena]
+    env_file:
+      - ./api/.env.production
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    networks: [codearena]
+    env_file:
+      - ./worker/.env.production
+    volumes:
+      # Lets dockerode talk to the HOST's Docker daemon to spawn judge sandboxes — see
+      # worker/Dockerfile's comment on why this is the one container that isn't non-root.
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    mem_limit: 384m
+    networks: [codearena]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    networks: [codearena]
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      - api
+      - frontend

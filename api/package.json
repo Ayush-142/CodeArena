@@ -11,6 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
+    "reset-demo": "tsx src/scripts/reset-demo-contest.ts",
+    "simulate-contest": "tsx src/scripts/simulate-contest.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
