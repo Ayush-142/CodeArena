@@ -113,41 +113,51 @@ CodeArena is an online judge and contest platform (Codeforces/LeetCode-style):
 
 ## 3. Repository Layout
 
+The layout actually in use (not the original pre-Phase-0 sketch — kept current since, per §12,
+"the socket server is a separate deployable" turned out to mean "a separate *module*, not a
+separate top-level workspace"):
+
 ```
 /                      npm workspaces root
-├── CLAUDE.md          short pointer → "read ARCHITECTURE.md first"
-├── ARCHITECTURE.md    this document
-├── docker-compose.yml local infra: MongoDB, Redis, MinIO (optional)
-├── /api               Express API (stateless)
-│   ├── src/
-│   │   ├── index.ts           server bootstrap
-│   │   ├── config/            env loading & validation
-│   │   ├── db/                mongoose connection, models/
-│   │   ├── redis/             redis clients (separate client for pub)
-│   │   ├── middleware/        auth (JWT), rateLimit, errorHandler, validate
-│   │   ├── routes/            auth, problems, submissions, contests, hints
-│   │   ├── services/          business logic (thin routes, testable services)
-│   │   └── queue/             BullMQ queue producer
-│   └── .env.example
-├── /worker            Judge workers (BullMQ consumers)
-│   ├── src/
-│   │   ├── index.ts           worker bootstrap
-│   │   ├── judge/             pipeline: fetch tests → sandbox → compare → verdict
-│   │   ├── sandbox/           dockerode wrapper: create/run/kill containers
-│   │   └── testcases/         object-storage fetch + local cache
-│   └── .env.example
-├── /socket            Socket.io server (may start inside /api process in dev;
-│   │                  MUST be extractable — keep it a separate module with its
-│   │                  own bootstrap so it can run standalone in production)
-│   └── src/index.ts
-└── /frontend          Next.js App Router
+├── README.md / ARCHITECTURE.md / DEPLOY.md / DEMO.md
+├── docker-compose.yml       local dev infra: Mongo, Redis, MinIO
+├── docker-compose.prod.yml  production topology — see §12, DEPLOY.md
+├── Caddyfile                 reverse proxy config for the production deploy
+├── api/Dockerfile · worker/Dockerfile · frontend/Dockerfile
+├── problems/                 seed problem data (statement.md, samples/, tests/ per slug)
+├── scripts/solutions/        known-AC/WA/TLE .cpp solutions used by simulate-contest.ts
+├── docs/screenshots/         README's screenshot slots
+├── .github/workflows/ci.yml
+├── api/                Express API (stateless) — socket server lives here too, see §12
+│   └── src/
+│       ├── index.ts, metrics.ts, logger.ts, queue.ts, storage.ts, validation.ts
+│       ├── config/            env loading & validation, rate-limit window configs
+│       ├── models/             Mongoose schemas
+│       ├── redis/              the shared (non-pub/sub) redis client
+│       ├── middleware/         auth (JWT), rateLimit, errorHandler
+│       ├── routes/             auth, problems, submissions, run, contests, adminContests, hints, metrics
+│       ├── contests/           rebuild.ts (standings/finalization), resolveGatedProblem.ts
+│       ├── hints/               llm.ts, prompts.ts, quota.ts
+│       ├── socket/              index.ts (initSocket), types.ts — see §12 for why this
+│       │                        isn't its own top-level workspace
+│       └── scripts/             seed.ts, reset-demo-contest.ts, simulate-contest.ts,
+│                                 recover-stalled-submissions.ts, test-hint-leakage.ts
+├── worker/              Judge workers (BullMQ consumers)
+│   └── src/
+│       ├── index.ts (both the judge and runs Workers), metrics.ts, logger.ts, redis.ts
+│       ├── judge.ts, run.ts, compare.ts   pipeline: compile → sandbox → compare → verdict
+│       ├── sandbox.ts           dockerode wrapper: create/run/kill containers
+│       ├── testcases.ts         object-storage fetch + worker-local cache
+│       ├── scoring.ts           contest ZINCRBY scoring
+│       └── models/               duplicated Mongoose schemas (see Conventions below)
+└── frontend/            Next.js App Router
     ├── app/
-    │   ├── problems/          list + [slug]/ problem-solving page
-    │   ├── contests/          lobby + [id]/ contest page + leaderboard
-    │   ├── auth/              login/register
-    │   └── profile/
-    ├── components/            editor, verdict badges, hint panel, leaderboard
-    └── lib/                   api client, socket client, types
+    │   ├── problems/            list + [slug]/ problem-solving page
+    │   ├── contests/            lobby + [id]/ contest page + leaderboard
+    │   ├── login/ · register/
+    │   └── styleguide/          the living design-system reference — ships to prod
+    ├── components/               editor, verdict badges, hint panel, leaderboard
+    └── lib/                      api client, socket client, types
 ```
 
 Conventions:
@@ -359,7 +369,21 @@ Base images: pinned digests (e.g. `gcc:13` for C++, `python:3.12-slim`), pulled 
 worker startup, never `latest` in production.
 
 **Stated future hardening (mention, don't build v1):** seccomp profiles, gVisor/Firecracker
-class isolation, dedicated judge hosts separated from the API network.
+class isolation, dedicated judge hosts separated from the API network. A Docker-socket proxy
+(e.g. `docker-socket-proxy`) exposing only the specific create/start/stop/remove calls the
+worker actually needs, so the worker's own container (see below) could run non-root too.
+
+**A distinct, deliberate exception, not a weakening of the model above:** in the production
+Docker deployment (`worker/Dockerfile`, `docker-compose.prod.yml`), the **worker's own
+container** — not the judge sandbox containers it spawns, which are always non-root per the list
+above — runs as root, because it bind-mounts the host's `/var/run/docker.sock` to talk to the
+host's Docker daemon via `dockerode`. That mount in practice requires root (or a user in a group
+matching the host socket's GID, which isn't portable to provision generically at image-build
+time). A process with access to the host's Docker socket can, in principle, launch arbitrary
+privileged containers — equivalent to root on the host. This is the standard, known tradeoff of
+the "container talks to host Docker via socket" pattern; it is documented here and in
+`worker/Dockerfile`'s own comment rather than left implicit, and the proxy-based hardening path
+above is the way to close it later.
 
 ---
 
@@ -611,14 +635,29 @@ GET    /api/contests/:id/leaderboard/:userId
                                       per-problem ICPC cells for one user — live contests
                                       only (finalized rows already embed cells inline above)
 --- admin (role-gated) ---
-POST/PUT /api/admin/problems         author problems, upload test cases
 POST   /api/admin/contests           requireAuth + requireAdmin
 PUT    /api/admin/contests/:id       requireAuth + requireAdmin; rejects once finalized
+                                      (there is no admin problem-authoring route — problems are
+                                      seeded exclusively via the filesystem-driven
+                                      api/src/scripts/seed.ts, reading /problems/<slug>/; a doc/
+                                      code gap as of Phase 7, corrected here rather than left
+                                      claiming a route that was never built)
+--- ops (unauthenticated; /health and /ready per service, /metrics on the api only) ---
+GET    /health                       liveness only, no dependency checks
+GET    /ready                        { mongo, redis, worker } — worker checked via its Redis
+                                      heartbeat key, not a direct call (it has no HTTP listener)
+GET    /metrics                      JSON — queue depth, judge latency, verdicts/runs per min,
+                                      active socket connections, hint tokens/day + cache hit
+                                      rate (§13). Deliberately not under /api and not proxied
+                                      by Caddy in production.
 ```
 
-Cross-cutting: use a consistent error shape `{ error: { code, message } }`;
-zod (or similar) validation middleware on every route; global error handler;
-auth middleware attaches `req.user`; helmet + CORS configured explicitly.
+Cross-cutting: a consistent error shape `{ error: { code, message, details? } }`
+(`middleware/errors.ts`); manual inline validation per route (`typeof`/shape checks, plus
+`validateCodeSubmission()` shared between submissions and run) — no schema-validation library
+(zod or similar) is actually used, despite earlier drafts of this document assuming one would
+be; global error handler; auth middleware attaches `req.user`; helmet + CORS configured
+explicitly.
 
 ---
 
@@ -628,7 +667,7 @@ auth middleware attaches `req.user`; helmet + CORS configured explicitly.
 |---|---|
 | Worker crashes mid-judge | BullMQ stalled-job detection → job retried by another worker. Judging is idempotent, so retry is safe. |
 | Duplicate submit (double-click/retry) | Idempotency key dedupe at API → same submissionId returned. |
-| Redis down | API accepts submissions to Mongo (`queued`); recovery script re-enqueues. Live features degrade; leaderboard reconstructible from Mongo. |
+| Redis down | API accepts submissions to Mongo (`queued`) — `POST /api/submissions` catches the `submissionsQueue.add()` failure and still returns `202` rather than erroring (both Redis clients the API uses are configured to fail fast when disconnected — `disableOfflineQueue`/`enableOfflineQueue:false` — rather than hang waiting for reconnection, confirmed empirically during Phase 7: without this, the request hung for minutes instead of degrading). `api/src/scripts/recover-stalled-submissions.ts` (`npm run recover`), run once Redis is back, finds anything still `queued` past a 2-minute staleness threshold and re-enqueues it — safe even if a submission was actually still legitimately queued, since judging is idempotent. Live features degrade meanwhile; leaderboard reconstructible from Mongo. |
 | Verdict written but pub/sub message lost | Client pull fallback: refetch on reconnect/focus. Push = speed, pull = correctness. |
 | Malicious code (fork bomb, mem bomb, net calls, output flood) | Sandbox limits in §6: pids-limit, memory cap, network=none, output cap, wall-clock kill. |
 | LLM down/slow | Hint endpoint times out gracefully; judging unaffected. |
@@ -639,36 +678,91 @@ auth middleware attaches `req.user`; helmet + CORS configured explicitly.
 
 ## 12. Scaling Story (deploy-level, not code-level)
 
-Deployed v1 runs single instances of everything on one VPS + Vercel frontend.
-The architecture is deliberately such that scale-out changes deployment only:
+Deployed v1 (Phase 7) runs every service — frontend, api (with the socket server inside the same
+process, see below), worker, Redis, Mongo, MinIO, Caddy — as single instances on one Azure B2s VM
+(2 vCPU / 4GB RAM) via Docker Compose (`docker-compose.prod.yml`, see DEPLOY.md). No Vercel: the
+frontend is served from the same VM/domain as the API and socket server specifically so the
+`SameSite=Strict` auth cookie works without cross-origin complications (§8). The architecture is
+deliberately such that scale-out changes deployment only, not code:
 
+- **Socket server placement:** runs inside the `api` container process today, not as a separate
+  deployable — a 4th long-running process buys nothing when every service is a single replica
+  anyway. Extractability is proven by construction, not by actually extracting it: `initSocket
+  (httpServer)` (`api/src/socket/index.ts`) has zero imports from `routes/*` and takes only an
+  `httpServer` argument — a standalone bootstrap could call the same function tomorrow with zero
+  changes to the module itself.
 - **10x users:** add API replicas behind a load balancer (stateless → trivial);
-  add judge workers (autoscale metric: **queue depth**); Redis and Mongo still fine.
+  add judge workers (autoscale metric: **queue depth**, now exposed at `GET /metrics`); Redis and
+  Mongo still fine. This is also the point where the socket server would actually move to its own
+  replica set, using the extractability above.
 - **100x:** multiple Socket.io instances (Redis adapter already wired + sticky LB);
   MongoDB replica set for durability/read scaling; Redis Sentinel; move judge
-  workers to dedicated hosts (CPU-isolated from API); CDN in front of frontend
-  (Vercel provides) and object storage.
+  workers to dedicated hosts (CPU-isolated from API); CDN in front of the frontend and object
+  storage.
 - **Beyond:** shard the submissions collection only (the sole unbounded collection);
   candidate shard key: hashed `_id` or `contestId`. Measure before sharding.
 - Problem pages: ISR caching at the frontend (they change rarely) — hottest read
   path served without touching the API.
 
+**Measured, not just theorized:** `scripts/simulate-contest.ts --load` drives a real sustained
+submission load against the deployed VM and prints throughput/queue-depth/latency/drain-time —
+see README.md's "Measured performance" table and DEPLOY.md's "Acceptance / load test" section.
+The result that matters architecturally: API response latency stays flat under load while queue
+depth absorbs the burst — direct empirical confirmation of the queue-decoupling principle (§2),
+not just an assertion.
+
 ---
 
-## 13. Observability & Ops (minimum viable, do build)
+## 13. Observability & Ops (what exists, as of Phase 7)
 
-- **Metrics:** queue depth, judge latency (enqueue→verdict histogram), verdicts/min
-  by type, runs/min (Run on samples, §5 — tracked separately from verdicts/min since a run
-  never touches the Submission collection), active socket connections, LLM tokens/day.
-  Prometheus counters or even a `/metrics` JSON endpoint v1 — existence matters more than
-  tooling polish.
-- **Logging:** structured (pino), one line per lifecycle event with submissionId
-  as correlation id across api/worker/socket logs.
-- **Health:** `/health` per service (checks Mongo + Redis connectivity).
-- **CI:** GitHub Action — typecheck, lint, unit tests on the judge comparator and
-  hint prompt guards, build all workspaces.
-- **Deploy:** frontend on Vercel; api + worker + socket + Redis + Mongo (or Atlas)
-  on a VPS via docker-compose; secrets via env.
+- **Metrics — `GET /metrics`** (`api/src/routes/metrics.ts`, `api/src/metrics.ts`), JSON, no
+  auth (matches `/health`/`/ready`'s posture; deliberately not proxied by Caddy in production —
+  reachable only inside the compose network or via `curl localhost:PORT` on the VM itself, never
+  the public domain — see the Caddyfile). Reuses the same Redis sliding-window-ZSET idiom already
+  built for rate limiting (`middleware/rateLimit.ts`) rather than a new primitive: the **worker**
+  writes (`worker/src/metrics.ts`) — `verdicts/min` by type, `runs/min`, judge latency
+  (avg/p50/p95, enqueue→verdict via BullMQ's `job.timestamp`, last 200 samples) — and the **api**
+  reads them back plus its own locally-tracked figures (active socket connections, an in-memory
+  counter; hint tokens/day as a plain daily `INCRBY` counter, not a ZSET — a ZSET keyed by token
+  count would collide whenever two hints used the same count; hint cache hit/miss rate). Queue
+  depth is a live `BullMQ.getJobCounts()` poll, not a counter. The worker has no HTTP listener at
+  all (pure BullMQ consumer, no exposed port) — its liveness is a Redis heartbeat key
+  (`worker:heartbeat`, refreshed every 10s, 30s TTL) folded into `GET /ready` as a third boolean
+  alongside `mongo`/`redis`.
+- **Logging:** structured JSON via `pino` (`api/src/logger.ts`, `worker/src/logger.ts` —
+  duplicated per this repo's api/worker convention), pretty-printed in dev. `submissionId`/`runId`
+  bound as a child-logger field at the call sites that have them (the judge/run worker callbacks,
+  the socket bridge, the hints route), so one id greps every line touching that submission/run
+  across a process's output. The `uncaughtException` guard's own logging (§9) stays plain
+  `console.error` deliberately — it must survive even if the logger itself is somehow broken.
+- **Health:** `GET /health` (liveness only) and `GET /ready` (checks Mongo + Redis connectivity +
+  the worker heartbeat above) on the api. Both deliberately unauthenticated and un-proxied by
+  Caddy in production.
+- **CI (`.github/workflows/ci.yml`):** GitHub Action, triggered on push/PR to `main`/`feat/**`,
+  deliberately zero `services:` block — every unit test imports only pure functions and mocks any
+  module with a Redis/env side effect at import time, so a test accidentally requiring real infra
+  fails loudly (connection refused) instead of silently passing. Four steps: typecheck (`tsc
+  --noEmit` per workspace), lint (a shared root `eslint.config.js`, `typescript-eslint`
+  recommended rules only), test (`vitest`, api + worker), build. Runs on `node:22`, matching the
+  Docker images. Unit tests: the judge output comparator (`worker/src/compare.ts`, extracted from
+  `judge()`/`runSamples()` for testability), `scoreGroup` (`api/src/contests/rebuild.ts`,
+  per-problem cell math), `packScore`/`unpackScore` round-trip, `normalizeCode`/
+  `computeFailureSignature` (hint cache-key determinism), and `buildUserPrompt` (hint
+  prompt-injection tag-wrapping, including a test that documents — not silently assumes — that
+  untrusted code is *not* escaped inside the tags, relying on the system prompt's instruction
+  instead). `test-hint-leakage.ts` stays a manual pre-release gate (needs a real Gemini key, burns
+  ~9/20 of the daily quota) — never wired into CI.
+- **Deploy:** single Azure B2s VM, everything via Docker Compose (`docker-compose.prod.yml`),
+  Caddy for automatic HTTPS — see §12 and DEPLOY.md for the full runbook.
+- **Seed data + demo tooling:** `api/src/scripts/seed.ts` (7 problems across easy/medium/hard, an
+  admin + 4 demo users, one finalized past contest with realistic per-problem-cell standings, one
+  upcoming live-demo contest), `reset-demo-contest.ts` (makes the live demo contest re-runnable —
+  shifts its window, wipes prior bot data and the stale Redis leaderboard ZSET, re-hides its
+  problems), `simulate-contest.ts` (a bot-contest driver hitting the real HTTP API — register,
+  contest-register, submit, poll — never DB inserts; also doubles as `--load`, an
+  acceptance/throughput test, and `--cleanup`), and `recover-stalled-submissions.ts` (§11's Redis
+  outage recovery path). All are compiled into the production image and runnable via `docker
+  compose exec` — see DEPLOY.md.
 
 ---
 
@@ -707,8 +801,18 @@ non-leakage test script (`api/src/scripts/test-hint-leakage.ts`), and a process-
 `unhandledRejection` guard for a Gemini streaming/abort timing race found during
 testing.
 
-Phase 7 — **Hardening + polish (current):** metrics, CI, seed data, deploy, README
-with architecture diagram, demo script.
+Phase 7 — DONE: hardening + polish. `GET /metrics` (Redis-ZSET-backed, reusing the rate-limit
+sliding-window idiom), structured `pino` logging with submissionId/runId correlation across
+api/worker, the `verdicts` → `ch:verdicts` Pub/Sub rename (closing the last `{scope}:{key}`
+convention exception), a from-scratch CI workflow (typecheck/lint/test/build, zero infra), seed
+data (7 problems, demo users, a finalized past contest, a live demo contest) plus
+`reset-demo-contest.ts`/`simulate-contest.ts` (real-HTTP bot driver, also an acceptance/load-test
+mode) for a repeatable live demo, a Redis-outage recovery path
+(`recover-stalled-submissions.ts` — found and fixed a real gap where the promised graceful
+degradation actually hung requests for minutes instead of degrading), three multi-stage
+production Dockerfiles + `docker-compose.prod.yml` + Caddy (automatic HTTPS) deploying the whole
+stack to a single Azure B2s VM, and README.md/DEPLOY.md/DEMO.md. See §12/§13 for what's actually
+running, DEPLOY.md for the exact deploy runbook, DEMO.md for the walkthrough.
 
 Each phase: implement → verify with explicit commands → commit → /clear session.
 The project owner reviews every diff and must be able to explain every decision.
