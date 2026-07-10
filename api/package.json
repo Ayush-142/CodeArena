@@ -13,6 +13,7 @@
     "seed": "tsx src/scripts/seed.ts",
     "reset-demo": "tsx src/scripts/reset-demo-contest.ts",
     "simulate-contest": "tsx src/scripts/simulate-contest.ts",
+    "recover": "tsx src/scripts/recover-stalled-submissions.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },

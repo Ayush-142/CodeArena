@@ -22,7 +22,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.11'
+          # Matches the node:22-alpine base image used by api/Dockerfile, worker/Dockerfile,
+          # and frontend/Dockerfile — CI should typecheck/build/test against the same major
+          # version that actually runs in production, not an older floor.
+          node-version: '22'
           cache: npm
 
       - name: Install dependencies

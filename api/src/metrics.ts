@@ -21,6 +21,7 @@ async function countLastMinute(key: string): Promise<number> {
 
 interface JudgeLatencyStats {
   avgMs: number | null;
+  p50Ms: number | null;
   p95Ms: number | null;
   sampleCount: number;
 }
@@ -31,10 +32,10 @@ async function judgeLatencyStats(): Promise<JudgeLatencyStats> {
     .map(Number)
     .filter((n) => !Number.isNaN(n))
     .sort((a, b) => a - b);
-  if (values.length === 0) return { avgMs: null, p95Ms: null, sampleCount: 0 };
+  if (values.length === 0) return { avgMs: null, p50Ms: null, p95Ms: null, sampleCount: 0 };
   const avgMs = Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
-  const p95Index = Math.min(values.length - 1, Math.ceil(values.length * 0.95) - 1);
-  return { avgMs, p95Ms: values[p95Index], sampleCount: values.length };
+  const percentile = (p: number) => values[Math.min(values.length - 1, Math.ceil(values.length * p) - 1)];
+  return { avgMs, p50Ms: percentile(0.5), p95Ms: percentile(0.95), sampleCount: values.length };
 }
 
 // --- Active socket connections: in-memory, owned by socket/index.ts's connection/disconnect

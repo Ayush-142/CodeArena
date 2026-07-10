@@ -14,7 +14,8 @@
     "dev:frontend": "npm --workspace frontend run dev",
     "seed": "npm --workspace api run seed",
     "reset-demo": "npm --workspace api run reset-demo",
-    "simulate-contest": "npm --workspace api run simulate-contest",
+    "simulate-contest": "npm --workspace api run simulate-contest --",
+    "recover": "npm --workspace api run recover",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"

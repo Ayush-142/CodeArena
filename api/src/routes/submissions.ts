@@ -9,6 +9,7 @@ import { AppError, asyncHandler, isMongoDuplicateKeyError } from '../middleware/
 import { SUBMISSION_RATE_WINDOWS } from '../config/rateLimits.js';
 import { validateCodeSubmission } from '../validation.js';
 import { resolveGatedProblem } from '../contests/resolveGatedProblem.js';
+import { logger } from '../logger.js';
 
 export const submissionsRouter = Router();
 
@@ -102,7 +103,17 @@ submissionsRouter.post(
       throw err;
     }
 
-    await submissionsQueue.add('judge', { submissionId: submission._id.toString() });
+    try {
+      await submissionsQueue.add('judge', { submissionId: submission._id.toString() });
+    } catch (err) {
+      // Redis unreachable: the submission document already exists in MongoDB with
+      // status:'queued' (the source of truth, per ARCHITECTURE.md §2 principle 3) — degrade
+      // rather than fail the request. The client sees a normal 202 and polls normally; it just
+      // sits at 'queued' until api/src/scripts/recover-stalled-submissions.ts (run once Redis
+      // is back) finds it by age and re-enqueues it. Never silent: logged loudly since this is
+      // the one path where "accepted" doesn't yet mean "will be judged."
+      logger.error({ submissionId: submission._id.toString(), err }, 'failed to enqueue submission, Redis likely down — will be picked up by the recovery script once Redis is back');
+    }
     res.status(202).json({ id: submission._id.toString() });
   }),
 );
