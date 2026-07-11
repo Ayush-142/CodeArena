@@ -169,6 +169,13 @@ docker compose -f docker-compose.prod.yml --env-file .env.production --profile j
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
+**Never `up --build` on this box.** The first `build` above must run to completion by itself —
+it takes several minutes (base image pulls + `npm ci` + `next build`) and pins the 2 vCPUs the
+whole time. `up --build` interleaves that same CPU-starved build with `up`'s own healthcheck
+polling for `mongo`/`redis`/`minio`, and a busy-but-fine service can get marked `unhealthy` and
+wedge the `depends_on: condition: service_healthy` chain (this happened for real on the deployed
+VM — see the Troubleshooting section below). Always run `build` to completion, THEN `up -d`.
+
 The first `build` takes several minutes (base image pulls + `npm ci` + `next build`). The
 `judge-image` line is a **separate, explicit build** — it produces the `codearena-judge:12-bookworm`
 image `worker/src/sandbox.ts` spawns judge sandboxes from (real contestant C++ almost always
@@ -312,3 +319,6 @@ docker compose -f docker-compose.prod.yml --env-file .env.production down
 | Registration/login "rate limited" during testing | `rl:auth:{ip}` is 10 attempts/15min/IP (`api/src/config/rateLimits.ts`) — shared between register and login from the same source IP; wait out the window or use a different account for the next test. |
 | `git pull` conflicts with local `.env.production` files | It shouldn't — they're gitignored and were never tracked. If you see a conflict, something else was edited in a tracked file; resolve normally, the env files are untouched either way. |
 | Submissions from during a Redis outage stuck at `queued` | Expected — see ARCHITECTURE.md §11. Once Redis is back: `docker compose -f docker-compose.prod.yml --env-file .env.production exec api node api/dist/scripts/recover-stalled-submissions.js`. |
+| A service (e.g. `minio`) shows `unhealthy` during heavy load, like mid-build | Check `docker stats` / `free -h` before assuming the service is broken — the box is genuinely small and can be busy, not dead. The healthchecks are already tuned tolerant for this (`start_period: 30s`, `timeout: 10s`, `retries: 12` — see `docker-compose.prod.yml`); this row is for while you're waiting on those to catch up, or if it still doesn't recover. |
+| A container's `BLOCK I/O` in `docker stats` keeps growing by gigabytes while it sits pinned at its `mem_limit` | The limit is too small for that service's actual working set — it's thrashing its page cache against disk (confirmed root cause for `minio` at 256m: memory pinned at the limit, ~186GB cumulative block reads during one `up --build`, which saturated the IOPS-capped Azure disk and starved its own healthcheck). Raise `mem_limit` for that service rather than assuming it's hung or broken. |
+| Services were slow/unhealthy after a long `build` | Also check Azure CPU credits for the VM (`az vm get-instance-view` or the Azure portal's "CPU credits remaining" metric) — B-series burstable VMs throttle hard once credits are exhausted, and a long build is exactly what burns through them. |

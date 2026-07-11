@@ -7,10 +7,12 @@
 # (see Caddyfile) — reachable only inside this network or via `curl localhost:PORT` on the VM
 # itself, never through the public domain.
 #
-# mem_limits sum to ~2.24GB, leaving >1GB headroom under the 4GB box for judge-container bursts
+# mem_limits sum to ~2.44GB (2496m: mongo 512 + redis 128 + minio 512 + api 384 + worker 512 +
+# frontend 384 + caddy 64), leaving ~1.5GB headroom under the 4GB box for judge-container bursts
 # (the judge sandboxes worker spawns are separate, short-lived containers capped by each
 # problem's own memoryLimitMb — not counted against `worker`'s own limit here) plus the OS,
-# backed by the 2GB swapfile DEPLOY.md has you create as a safety net.
+# backed by the 2GB swapfile DEPLOY.md has you create as a safety net. minio's share went
+# 256m -> 512m after a real incident — see its own mem_limit comment below.
 
 networks:
   codearena:
@@ -36,10 +38,13 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      # Tolerant settings for a burstable 2-vCPU box (raised from interval:10s/timeout:5s/
+      # retries:5/start_period:20s after `up --build` starved minio's healthcheck during
+      # image builds — see minio's own healthcheck comment below for the confirmed root cause).
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
@@ -48,14 +53,24 @@ services:
     networks: [codearena]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      # Same small-box tolerance as mongo/minio — see minio's healthcheck comment below.
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 12
+      start_period: 30s
 
   minio:
     image: minio/minio:RELEASE.2025-04-08T15-41-24Z
     restart: unless-stopped
-    mem_limit: 256m
+    # Confirmed root cause (real incident on the deployed VM, not theoretical): 256m was below
+    # minio's actual working set, so it was constantly evicting/refetching its own page cache
+    # under cgroup memory pressure — `docker stats` showed memory pinned at the 256m limit while
+    # BLOCK I/O climbed by ~186GB cumulative during a single `up --build`, saturating the
+    # IOPS-capped Azure disk and starving minio's own healthcheck endpoint (curl got 0 bytes in
+    # 5s, ExitCode -1), which wedged every service behind `depends_on: condition: service_healthy`.
+    # 512m gives it real headroom instead of a knife's-edge limit; if this is ever downsized
+    # again, watch BLOCK I/O in `docker stats` for the same climbing pattern as the tell.
+    mem_limit: 512m
     command: server /data --console-address ":9001"
     networks: [codearena]
     volumes:
@@ -65,10 +80,14 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # start_period 30s / timeout 10s / retries 12: a busy-but-healthy minio (e.g. mid-build,
+      # competing with the other services' image builds for the 2 vCPUs) must not get marked
+      # dead just because one probe was slow — see the mem_limit comment above for the incident
+      # this tolerance is sized against.
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
 
   api:
     build:
