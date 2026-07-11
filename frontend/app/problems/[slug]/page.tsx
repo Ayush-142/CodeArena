@@ -206,7 +206,17 @@ export default function ProblemSolvingPage() {
   return (
     <main className="flex flex-1 flex-col gap-4 p-4">
       <div>
-        <h1 className="font-display text-xl font-bold text-ink">{problem.title}</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="font-display text-xl font-bold text-ink">{problem.title}</h1>
+          {problem.solved ? (
+            <span className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wide text-verdict-ac">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-verdict-ac">
+                ✓
+              </span>
+              Solved
+            </span>
+          ) : null}
+        </div>
         <div className="mt-2 flex flex-wrap gap-2 font-mono text-xs">
           <span className="chip">
             {DIFFICULTY_LABELS[problem.difficulty]} {problem.difficulty}
@@ -251,17 +261,6 @@ export default function ProblemSolvingPage() {
             <div className="flex-1 overflow-auto p-4">
               {leftTab === 'description' ? (
                 <div className="flex flex-col gap-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-display text-lg font-bold text-ink">{problem.title}</h2>
-                    {problem.solved ? (
-                      <span className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wide text-verdict-ac">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-verdict-ac">
-                          ✓
-                        </span>
-                        Solved
-                      </span>
-                    ) : null}
-                  </div>
                   <MarkdownStatement statementMd={problem.statementMd} />
                   <div>
                     <h2 className="mb-2 font-display font-bold text-ink">Samples</h2>
