@@ -2,7 +2,8 @@
 // loop untested (2*2=4 > 1, loop body never runs) and incorrectly prints YES. Fails the
 // hidden test for n=1 (expected NO). Used by scripts/simulate-contest.ts to produce a
 // realistic WA verdict.
-#include <bits/stdc++.h>
+// <iostream>, not <bits/stdc++.h> — see is-prime.ac.cpp's comment on the compile-timeout risk.
+#include <iostream>
 int main() {
   long long n;
   std::cin >> n;

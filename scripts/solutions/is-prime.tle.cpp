@@ -2,7 +2,8 @@
 // judge time limit regardless of which hidden test it runs against. `volatile` prevents g++
 // -O2 (see worker/src/sandbox.ts's compile step) from optimizing the loop away as dead code.
 // Used by scripts/simulate-contest.ts to produce a realistic TLE verdict.
-#include <bits/stdc++.h>
+// <iostream>, not <bits/stdc++.h> — see is-prime.ac.cpp's comment on the compile-timeout risk.
+#include <iostream>
 int main() {
   long long n;
   std::cin >> n;

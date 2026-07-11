@@ -1,6 +1,9 @@
 // Known-AC reference solution for two-sum — verified against the real judging pipeline
 // (Phase 7 seed data verification, all 5 hidden tests passed).
-#include <bits/stdc++.h>
+// <iostream>/<vector>, not <bits/stdc++.h> — see is-prime.ac.cpp's comment on the
+// compile-timeout risk that header carries.
+#include <iostream>
+#include <vector>
 int main() {
   int n;
   long long t;

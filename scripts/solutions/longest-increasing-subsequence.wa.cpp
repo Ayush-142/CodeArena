@@ -2,7 +2,11 @@
 // NON-decreasing subsequence instead of the required STRICTLY increasing one. Matches on
 // all-distinct inputs but fails on the "all equal" hidden test (expects 1, this gives 6).
 // Used by scripts/simulate-contest.ts to produce a realistic WA verdict.
-#include <bits/stdc++.h>
+// <iostream>/<vector>/<algorithm>, not <bits/stdc++.h> — see is-prime.ac.cpp's comment on
+// the compile-timeout risk that header carries.
+#include <iostream>
+#include <vector>
+#include <algorithm>
 int main() {
   int n;
   std::cin >> n;

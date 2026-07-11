@@ -1,7 +1,10 @@
 // Deliberately wrong: prints 0-indexed positions instead of the required 1-indexed ones, so
 // the exact-match output comparison (worker/src/compare.ts) fails on every test, starting
 // with the first. Used by scripts/simulate-contest.ts to produce a realistic WA verdict.
-#include <bits/stdc++.h>
+// <iostream>/<vector>, not <bits/stdc++.h> — see is-prime.ac.cpp's comment on the
+// compile-timeout risk that header carries.
+#include <iostream>
+#include <vector>
 int main() {
   int n;
   long long t;
