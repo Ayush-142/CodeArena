@@ -14,7 +14,13 @@
 # Single source of truth: worker/judge/compile-flags.txt, read by both this Dockerfile (COPY +
 # cat below) and worker/src/sandbox.ts (readFileSync at runtime) — the same bytes, so the two
 # cannot drift apart.
-FROM gcc:12-bookworm
+#
+# Pinned by digest per ARCHITECTURE.md §6 ("Base images: pinned digests ... never latest in
+# production") — never a floating tag, so a `docker build` next month can't silently swap in a
+# different gcc:12-bookworm build (which could also invalidate the .gch's flag-match, per the
+# comment above). Re-resolve with `docker inspect gcc:12-bookworm --format
+# '{{index .RepoDigests 0}}'` after a deliberate, tested upgrade — never edit this blindly.
+FROM gcc:12-bookworm@sha256:112aacdc53e949b9d2ccefb9ed64930a7fda5e10e007430f244be27e0263220b
 
 COPY worker/judge/compile-flags.txt /opt/judge/compile-flags.txt
 

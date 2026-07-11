@@ -365,8 +365,19 @@ Every compile and every run happens in a **fresh Docker container** with ALL of:
 - Containers are `--rm` (auto-removed); worker also has a sweeper that kills any
   judge container older than 60s (leak protection if the worker crashed mid-judge).
 
-Base images: pinned digests (e.g. `gcc:13` for C++, `python:3.12-slim`), pulled at
-worker startup, never `latest` in production.
+Base image: `codearena-judge:12-bookworm` (`worker/judge/Dockerfile`) — a custom image built
+FROM `gcc:12-bookworm`, pinned by digest (never `latest` in production), not a bare pull of the
+upstream tag. It adds one thing: a precompiled `bits/stdc++.h` header, because that header —
+which real contestant C++ almost universally includes — measured 5.9-10.9s to compile from
+source standalone on a modest box, sitting right at/over the compile timeout and producing a
+real, reproducible spurious CE for correct code. Precompiling it drops that to well under 1s.
+The flags used to build the `.gch` are read from the same file (`worker/judge/
+compile-flags.txt`) that `worker/src/sandbox.ts` reads at runtime for the real per-submission
+compile — mismatched flags make GCC silently reject the precompiled header and fall back to a
+from-source compile with no error, so a single shared source of truth is load-bearing here, not
+cosmetic. Built via `docker compose ... --profile judge-image build judge-image` as an explicit
+deploy step (see DEPLOY.md) — not pulled automatically at worker startup, since dockerode's
+`createContainer` does not auto-pull a missing image.
 
 **Stated future hardening (mention, don't build v1):** seccomp profiles, gVisor/Firecracker
 class isolation, dedicated judge hosts separated from the API network. A Docker-socket proxy
