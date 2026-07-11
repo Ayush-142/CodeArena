@@ -2,9 +2,8 @@
 ## Authoritative Architecture & Build Reference
 
 > **Purpose of this document:** This is the single source of truth for the CodeArena project.
-> Any AI assistant or developer working on this codebase must read this document fully and
-> **must not deviate from the architecture described here without explicitly asking the
-> project owner first.** When in doubt, ask — do not invent alternative designs.
+> Read this document fully before making changes. The design decisions below are deliberate —
+> when in doubt, ask before deviating rather than inventing alternative designs.
 
 > **Project owner context:** Final-year CSE student building this as a placement portfolio
 > project for product-based company interviews, on a ~1 month timeline. Every architectural
@@ -840,14 +839,10 @@ The project owner reviews every diff and must be able to explain every decision.
 
 ---
 
-## 16. Working Agreement for AI Assistants on This Codebase
+## 16. Contributing Conventions
 
-1. Read this document before writing any code. Follow §2 principles absolutely.
-2. Plan before implementing; keep diffs scoped to one feature.
-3. Minimal dependencies — justify any new package in one sentence when proposing it.
-4. Never weaken sandbox flags (§6) for convenience, including in tests.
-5. Never move code execution into the API process, "temporarily" or otherwise.
-6. Keep TypeScript strict; no `any`.
-7. When a requirement is ambiguous or conflicts with this document, ask the owner —
-   do not silently choose.
-8. After each feature, output the exact commands the owner runs to verify it.
+1. Plan before implementing; keep diffs scoped to one feature.
+2. Minimal dependencies — justify any new package in one sentence when proposing it.
+3. Never weaken sandbox flags (§6) for convenience, including in tests; never move code
+   execution into the API process, "temporarily" or otherwise.
+4. Keep TypeScript strict; no `any`.

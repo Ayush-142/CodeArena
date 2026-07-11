@@ -10,5 +10,6 @@ npm-debug.log*
 *.tsbuildinfo
 worker/.cache/
 CLAUDE.md
-agent.md
+.agent.md
 .github/prompts
+.claude/

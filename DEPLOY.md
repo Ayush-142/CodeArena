@@ -2,7 +2,7 @@
 
 A step-by-step runbook for taking a blank Azure for Students VM to a running CodeArena
 deployment. Written to be executed **verbatim, in order**, over SSH — no step assumes access to
-your Azure account, your VM's IP, or any secret on the assistant's side. Every value you need to
+your Azure account or your VM's IP. Every value you need to
 generate or look up is called out explicitly with the exact command to produce it.
 
 **Target:** Azure B2s (2 vCPU / 4GB RAM), Ubuntu 24.04 LTS, amd64, public IP already provisioned.
