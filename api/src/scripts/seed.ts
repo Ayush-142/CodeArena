@@ -133,9 +133,14 @@ async function seedUsers(): Promise<Record<string, mongoose.Types.ObjectId>> {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, BCRYPT_COST);
   const idByHandle: Record<string, mongoose.Types.ObjectId> = {};
   for (const spec of DEMO_USERS) {
+    // findOneAndUpdate is Mongoose QUERY middleware — it never runs the `pre('validate')` hook
+    // that derives `handleLower` on `.save()`/`.create()` (that's document middleware only), so
+    // handleLower must be set explicitly here or every upserted user after the first would
+    // collide on the unique index with a missing (null) handleLower.
+    const handleLower = spec.handle.toLowerCase();
     const user = await User.findOneAndUpdate(
-      { handle: spec.handle },
-      { handle: spec.handle, email: spec.email, passwordHash, isAdmin: spec.isAdmin },
+      { handleLower },
+      { handle: spec.handle, handleLower, email: spec.email, passwordHash, isAdmin: spec.isAdmin },
       { upsert: true, new: true },
     );
     idByHandle[spec.handle] = user._id;

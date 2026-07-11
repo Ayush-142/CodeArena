@@ -179,10 +179,34 @@ unbounded arrays inside documents are a MongoDB anti-pattern.
 
 ### users
 ```
-{ _id, handle (unique, indexed), email (unique), passwordHash,
+{ _id, handle (indexed, display case preserved), handleLower (unique, derived, lowercased),
+  email (unique, stored lowercased), passwordHash,
   role: "user" | "admin", rating: number, solvedCount: number,
   createdAt, updatedAt }
 ```
+- **Handle/email uniqueness is case-insensitive, deliberately.** `handle` alone is NOT
+  unique-indexed — two documents could otherwise both hold `"Ayush"`/`"ayush"` (MongoDB's
+  default index collation is case-sensitive). The actual uniqueness key is `handleLower`, a
+  derived field (`handle.toLowerCase()`, set by a `pre('validate')` hook on `User`, api/src/
+  models/User.ts) carrying the real unique index — this preserves `handle`'s original case for
+  rendering while still making `"Ayush"` and `"ayush"` collide. `email` takes the simpler route
+  of storing the lowercased value directly (display case doesn't matter for email anywhere in
+  the product), so its one field is both the rendered value and the uniqueness key.
+- **Note for any code path that bypasses `User.create()`/`.save()`** (e.g. `findOneAndUpdate`
+  upserts in `seed.ts`): the `pre('validate')` hook is Mongoose *document* middleware and does
+  NOT fire for query-style updates — such call sites must set `handleLower` explicitly
+  themselves (`seed.ts`'s `seedUsers()` does).
+- Register's authoritative duplicate guard is the same pattern already used by `Hint`'s
+  compound unique index and submission idempotency keys: no pre-check `findOne` (a TOCTOU race
+  under concurrent identical registers), catch the unique-index violation's E11000 directly and
+  report a field-specific `409 HANDLE_TAKEN` / `409 EMAIL_TAKEN` using the error's `keyPattern`.
+- Login looks up by `handleLower` (case-insensitive) too — a user who registered as `"Ayush"`
+  can log in typing `"ayush"`.
+- Existing collections migrate via `api/src/scripts/migrate-user-handle-lower.ts`
+  (`npm run migrate:user-handle-lower [-- --apply]`): backfills `handleLower` on every existing
+  document, detects (and, for recognized bot/demo/seed handles only, auto-resolves) duplicate
+  groups, then explicitly `User.syncIndexes()`s — the unique index is built by this migration,
+  not left to mongoose's implicit background autoIndex on an already-populated collection.
 
 ### problems
 ```

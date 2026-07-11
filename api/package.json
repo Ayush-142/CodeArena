@@ -14,6 +14,7 @@
     "reset-demo": "tsx src/scripts/reset-demo-contest.ts",
     "simulate-contest": "tsx src/scripts/simulate-contest.ts",
     "recover": "tsx src/scripts/recover-stalled-submissions.ts",
+    "migrate:user-handle-lower": "tsx src/scripts/migrate-user-handle-lower.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },

@@ -25,18 +25,30 @@ function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [handleError, setHandleError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    setHandleError(null);
+    setEmailError(null);
     try {
       await register(handle, email, password);
       const next = searchParams.get('next') ?? '/';
       router.push(next);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Registration failed');
+      if (err instanceof ApiError && err.code === 'HANDLE_TAKEN') {
+        setHandleError('handle already taken');
+      } else if (err instanceof ApiError && err.code === 'EMAIL_TAKEN') {
+        setEmailError('email already in use');
+      } else if (err instanceof ApiError && err.code === 'HANDLE_OR_EMAIL_TAKEN') {
+        setHandleError('handle or email already in use');
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Registration failed');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -51,9 +63,13 @@ function RegisterForm() {
           <input
             className="mt-1 w-full rounded-md border border-line bg-transparent p-2 font-body text-ink"
             value={handle}
-            onChange={(e) => setHandle(e.target.value)}
+            onChange={(e) => {
+              setHandle(e.target.value);
+              setHandleError(null);
+            }}
             required
           />
+          {handleError ? <span className="mt-1 block text-verdict-wa">{handleError}</span> : null}
         </label>
         <label className="font-mono text-sm text-ink/70">
           Email
@@ -61,9 +77,13 @@ function RegisterForm() {
             type="email"
             className="mt-1 w-full rounded-md border border-line bg-transparent p-2 font-body text-ink"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setEmailError(null);
+            }}
             required
           />
+          {emailError ? <span className="mt-1 block text-verdict-wa">{emailError}</span> : null}
         </label>
         <label className="font-mono text-sm text-ink/70">
           Password

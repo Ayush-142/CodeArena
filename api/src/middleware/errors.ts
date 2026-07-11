@@ -17,6 +17,15 @@ export function isMongoDuplicateKeyError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 11000;
 }
 
+// MongoDB's E11000 error exposes which index it collided on via `keyPattern` (e.g.
+// `{ handleLower: 1 }`) — lets a route return a field-specific 409 instead of a generic one.
+// Only meaningful when isMongoDuplicateKeyError(err) is already true.
+export function mongoDuplicateKeyField(err: unknown): string | undefined {
+  const keyPattern = (err as { keyPattern?: unknown } | null)?.keyPattern;
+  if (!keyPattern || typeof keyPattern !== 'object') return undefined;
+  return Object.keys(keyPattern)[0];
+}
+
 // Express 4 does not auto-forward rejected promises from async handlers to error middleware
 // (that's Express 5 behavior); every async route handler must be wrapped so a throw/rejection
 // reaches errorHandler via next(err).

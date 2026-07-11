@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import type { Response } from 'express';
 import { User } from '../models/User.js';
 import { env } from '../config/env.js';
-import { AppError, asyncHandler, isMongoDuplicateKeyError } from '../middleware/errors.js';
+import { AppError, asyncHandler, isMongoDuplicateKeyError, mongoDuplicateKeyField } from '../middleware/errors.js';
 import { requireAuth, authCookieOptions, AUTH_COOKIE_NAME } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { AUTH_RATE_WINDOWS } from '../config/rateLimits.js';
@@ -60,8 +60,19 @@ authRouter.post(
       user = await User.create({ handle, email: normalizedEmail, passwordHash, isAdmin: false });
     } catch (err) {
       // No pre-check findOne: it would just be a TOCTOU race under concurrent identical
-      // registers anyway. Catch the unique-index violation directly instead.
+      // registers anyway (the same unique-index-as-race-guard pattern as the Hint model and
+      // submission idempotency keys). Catch the unique-index violation directly instead, and
+      // use the colliding index's key pattern to report which field it actually was —
+      // `handleLower` collides on case-insensitive handle match, `email` on the lowercased
+      // email already being taken.
       if (isMongoDuplicateKeyError(err)) {
+        const field = mongoDuplicateKeyField(err);
+        if (field === 'handleLower') {
+          throw new AppError(409, 'HANDLE_TAKEN', 'handle already taken');
+        }
+        if (field === 'email') {
+          throw new AppError(409, 'EMAIL_TAKEN', 'email already in use');
+        }
         throw new AppError(409, 'HANDLE_OR_EMAIL_TAKEN', 'handle or email already in use');
       }
       throw err;
@@ -81,7 +92,9 @@ authRouter.post(
       throw new AppError(400, 'VALIDATION_ERROR', 'handle and password are required');
     }
 
-    const user = await User.findOne({ handle });
+    // Case-insensitive lookup: handle uniqueness is enforced on handleLower (see User.ts), so a
+    // user who registered "Ayush" must also be able to log in typing "ayush" or "AYUSH".
+    const user = await User.findOne({ handleLower: handle.toLowerCase() });
     const ok = user ? await bcrypt.compare(password, user.passwordHash) : false;
     if (!user || !ok) {
       // Deliberately identical error for "no such user" and "wrong password" — don't leak
