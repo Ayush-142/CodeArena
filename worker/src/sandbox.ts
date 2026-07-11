@@ -1,6 +1,9 @@
 import Docker from 'dockerode';
 import { Writable } from 'node:stream';
 import * as tar from 'tar-stream';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 export interface CompileSuccess {
   ok: true;
@@ -24,9 +27,26 @@ export interface RunLimits {
 
 const docker = new Docker();
 
-const COMPILE_TIMEOUT_MS = 10_000;
+// Belt-and-braces over the precompiled-header fix in worker/judge/Dockerfile: even with the
+// PCH working, 20s leaves headroom for a slow box / cold image layer / an unusually large
+// real submission, without making a genuinely-hung compile wait too long. Env-configurable so
+// this can be tuned per-deploy without a code change.
+const COMPILE_TIMEOUT_MS = Number(process.env.COMPILE_TIMEOUT_MS) || 20_000;
 const COMPILE_MEMORY_MB = 512; // decoupled from the problem's runtime memory limit
 const POLL_INTERVAL_MS = 50;
+
+// Judge sandbox image — see worker/judge/Dockerfile for how this is built (gcc:12-bookworm
+// plus a precompiled bits/stdc++.h). Used for both compiling and running submitted code.
+const JUDGE_IMAGE = 'codearena-judge:12-bookworm';
+
+// Read once at module load, not per-compile — this is the SAME file
+// worker/judge/Dockerfile's PCH build reads (see that file's header comment on why these two
+// reads must never diverge). Loaded eagerly, not lazily, so a missing/misconfigured flags file
+// fails at worker startup rather than on a user's first submission.
+const COMPILE_FLAGS = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '../judge/compile-flags.txt'),
+  'utf8',
+).trim();
 
 interface ExecResult {
   stdout: string;
@@ -127,7 +147,7 @@ async function execWithTimeout(
 
 function createSandboxContainer(memoryLimitMb: number) {
   return docker.createContainer({
-    Image: 'gcc:12-bookworm',
+    Image: JUDGE_IMAGE,
     // Bounded keep-alive process: if the worker crashes mid-job, the container
     // self-terminates after 60s instead of leaking forever. It is not itself a
     // step timeout — compile/run timeouts are enforced separately below.
@@ -154,11 +174,13 @@ export async function compileCode(code: string): Promise<CompileResult> {
 
     const compile = await execWithTimeout(
       container,
-      ['sh', '-c', 'g++ -O2 -o /tmp/a.out /tmp/main.cpp'],
+      ['sh', '-c', `g++ ${COMPILE_FLAGS} -o /tmp/a.out /tmp/main.cpp`],
       COMPILE_TIMEOUT_MS,
     );
     if (compile === 'timeout') {
-      return { ok: false, compileError: 'compilation timed out' };
+      // Explicit duration so this reads distinctly from a real compiler error — a bare
+      // "compilation timed out" looks like it could be another flavor of CE at a glance.
+      return { ok: false, compileError: `compilation timed out after ${COMPILE_TIMEOUT_MS / 1000}s` };
     }
     if (compile.exitCode !== 0) {
       return { ok: false, compileError: compile.stderr || compile.stdout };

@@ -87,6 +87,18 @@ services:
       minio:
         condition: service_healthy
 
+  # Not a long-running service — this entry exists only so `docker compose ... build` produces
+  # the codearena-judge:12-bookworm image worker/src/sandbox.ts spawns judge sandboxes from (see
+  # worker/judge/Dockerfile). The `judge-image` profile is never activated by a plain
+  # `up -d`/`build`, so compose never tries to start a container for it; DEPLOY.md's build step
+  # names it explicitly with `--profile judge-image build judge-image` to make sure it runs.
+  judge-image:
+    build:
+      context: .
+      dockerfile: worker/judge/Dockerfile
+    image: codearena-judge:12-bookworm
+    profiles: ['judge-image']
+
   worker:
     build:
       context: .

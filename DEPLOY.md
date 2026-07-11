@@ -165,13 +165,20 @@ build arg from the root `.env.production`, not read from a per-service file (see
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production build
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile judge-image build judge-image
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
-The first `build` takes several minutes (base image pulls + `npm ci` + `next build`). `up -d`
-starts everything in dependency order — `api` and `worker` wait for `mongo`/`redis`/`minio` to
-report healthy before starting (see the `depends_on: condition: service_healthy` blocks in
-`docker-compose.prod.yml`).
+The first `build` takes several minutes (base image pulls + `npm ci` + `next build`). The
+`judge-image` line is a **separate, explicit build** — it produces the `codearena-judge:12-bookworm`
+image `worker/src/sandbox.ts` spawns judge sandboxes from (real contestant C++ almost always
+`#include <bits/stdc++.h>`, and that image has it precompiled — see `worker/judge/Dockerfile`'s
+comment). It's gated behind a compose profile that's never active by default specifically so
+the plain `build`/`up -d` above never try to treat it as a long-running service — without this
+line, the worker container still starts fine, but the very first real submission fails when
+`docker createContainer` can't find an image by that name. `up -d` starts everything in
+dependency order — `api` and `worker` wait for `mongo`/`redis`/`minio` to report healthy before
+starting (see the `depends_on: condition: service_healthy` blocks in `docker-compose.prod.yml`).
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production ps
@@ -284,6 +291,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production logs -f wor
 cd ~/codearena
 git pull
 docker compose -f docker-compose.prod.yml --env-file .env.production build
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile judge-image build judge-image
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 

@@ -35,6 +35,10 @@ ENV NODE_ENV=production
 COPY --from=prod-deps /app ./
 COPY --from=build /app/worker/dist ./worker/dist
 COPY --from=build /app/worker/package.json ./worker/package.json
+# sandbox.ts reads this at runtime (see its comment) — must sit at the same path relative to
+# dist/ here as judge/ sits relative to src/ in the repo, and must be the exact same bytes
+# worker/judge/Dockerfile's PCH build reads, or the two compile-flag sources drift apart.
+COPY worker/judge/compile-flags.txt ./worker/judge/compile-flags.txt
 # Deliberately NO non-root `USER` directive here — the one intentional exception in this
 # fleet's Dockerfiles. This container bind-mounts /var/run/docker.sock (see
 # docker-compose.prod.yml) to talk to the HOST's Docker daemon via dockerode, spawning judge
