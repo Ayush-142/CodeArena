@@ -16,7 +16,24 @@ import type {
   SubmissionHistoryItem,
 } from './types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+// Every request path below already starts with /api (createSubmission -> '/api/submissions',
+// etc.), so NEXT_PUBLIC_API_URL must be the bare origin — a trailing slash or an accidental
+// /api suffix in the env value would double up into /api/api/* and 404 every request (this
+// happened for real in production — see .env.production.example's comment). Normalize once at
+// module load so a misconfigured env value self-corrects instead of silently breaking the app.
+function normalizeApiBaseUrl(raw: string): string {
+  const strippedSlash = raw.replace(/\/+$/, '');
+  const normalized = strippedSlash.replace(/\/api$/, '');
+  if (normalized !== raw && process.env.NODE_ENV !== 'production') {
+    console.warn(
+      `[api] NEXT_PUBLIC_API_URL was "${raw}" — normalized to "${normalized}". Set it to the ` +
+        'bare origin (no trailing slash, no /api suffix) to avoid relying on this fallback.',
+    );
+  }
+  return normalized;
+}
+
+const API_BASE_URL = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001');
 
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 

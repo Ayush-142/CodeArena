@@ -143,7 +143,17 @@ Now edit all three with a real editor (`nano .env.production`, etc.) and fill in
 - `MINIO_ROOT_USER` — pick anything, e.g. `codearena`
 - `MINIO_ROOT_PASSWORD` — the third `openssl rand -hex 24` value from B5
 - `DOMAIN` — your full `<subdomain>.duckdns.org` from A1
-- `NEXT_PUBLIC_API_URL` — `https://<subdomain>.duckdns.org/api`
+- `NEXT_PUBLIC_API_URL` — the bare origin, e.g. `https://codearena-yourname.duckdns.org`.
+  **No trailing slash, no `/api` suffix** — `frontend/lib/api.ts`'s request paths already start
+  with `/api` (Caddy proxies `/api/*` to the `api` container); appending `/api` here doubles it
+  into `/api/api/*` and every request 404s (this happened for real on the deployed VM). `lib/
+  api.ts` normalizes a trailing slash or `/api` away defensively if it slips through anyway, but
+  don't rely on that — set it right here.
+  **`NEXT_PUBLIC_*` values are baked into the client bundle at BUILD time, not read at
+  container-start time** — if you ever change this value after the first deploy, you must
+  rebuild the frontend image (`docker compose -f docker-compose.prod.yml --env-file
+  .env.production build frontend`) and then `up -d`; restarting the existing container alone
+  will keep serving the old baked-in value.
 
 **`api/.env.production`**:
 - `MONGO_URI` — `mongodb://<MONGO_ROOT_USERNAME>:<MONGO_ROOT_PASSWORD>@mongo:27017/codearena?authSource=admin`, using the SAME values you just put in the root file
@@ -228,7 +238,12 @@ Then, from your own machine's browser (the real public path):
       cert (not a browser warning — if you see one, Caddy is still provisioning it; wait ~30s
       and reload, then check `docker compose logs caddy` if it persists).
 - [ ] `https://<subdomain>.duckdns.org/problems` shows the seeded problem list.
-- [ ] Register a real account, log in.
+- [ ] Open devtools' Network tab on the register page before submitting, register a real
+      account, and confirm the request goes to `/api/auth/register` — **not**
+      `/api/api/auth/register` (a doubled `/api` means `NEXT_PUBLIC_API_URL` was built with an
+      `/api` suffix — see the B6 note above; fix the env value and rebuild the frontend image,
+      don't just restart it).
+- [ ] Log in.
 - [ ] Submit a correct solution to any seeded problem, watch it go queued → running → **AC**
       live (no page refresh).
 - [ ] Visit `/contests`, open **CodeArena Winter Open** → **View leaderboard** → confirm the
