@@ -1,0 +1,92 @@
+[
+  {
+    "handle": "bot01",
+    "email": "bot01@codearena.dev",
+    "userId": "6a55fef930ea3c9b0371dc27",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmOTMwZWEzYzliMDM3MWRjMjciLCJoYW5kbGUiOiJib3QwMSIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MjksImV4cCI6MTc4NDYyNTUyOX0.KDsaRvEa8F8b-dc4XHJDI3DqRyZch2Xzfp5omQDO4F8"
+  },
+  {
+    "handle": "bot02",
+    "email": "bot02@codearena.dev",
+    "userId": "6a55fefa30ea3c9b0371dc29",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmYTMwZWEzYzliMDM3MWRjMjkiLCJoYW5kbGUiOiJib3QwMiIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzAsImV4cCI6MTc4NDYyNTUzMH0.SFSrVkHzvmETBQXts-CndGK75WaWC40jJGAjqDoksCc"
+  },
+  {
+    "handle": "bot03",
+    "email": "bot03@codearena.dev",
+    "userId": "6a55fefb30ea3c9b0371dc2b",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmYjMwZWEzYzliMDM3MWRjMmIiLCJoYW5kbGUiOiJib3QwMyIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzEsImV4cCI6MTc4NDYyNTUzMX0.535D178cXlW3Ef1idK1aXXlENd2PF18jhMAZ4RJuWvs"
+  },
+  {
+    "handle": "bot04",
+    "email": "bot04@codearena.dev",
+    "userId": "6a55fefb30ea3c9b0371dc2d",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmYjMwZWEzYzliMDM3MWRjMmQiLCJoYW5kbGUiOiJib3QwNCIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzEsImV4cCI6MTc4NDYyNTUzMX0.TtQPdhxTFCXA9PRDALjmDtEFo3bKCeec9ho_uoDu828"
+  },
+  {
+    "handle": "bot05",
+    "email": "bot05@codearena.dev",
+    "userId": "6a55fefc30ea3c9b0371dc2f",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmYzMwZWEzYzliMDM3MWRjMmYiLCJoYW5kbGUiOiJib3QwNSIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzIsImV4cCI6MTc4NDYyNTUzMn0.skW6F7bHKI7VMOpIa2MKTVHOVzIoHYP7H5DG3PzpHoQ"
+  },
+  {
+    "handle": "bot06",
+    "email": "bot06@codearena.dev",
+    "userId": "6a55fefd30ea3c9b0371dc31",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmZDMwZWEzYzliMDM3MWRjMzEiLCJoYW5kbGUiOiJib3QwNiIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzMsImV4cCI6MTc4NDYyNTUzM30.FR84zGe1pIDZbpsna2-YPZ5RGoM-OQmmyu2FDHK8BKM"
+  },
+  {
+    "handle": "bot07",
+    "email": "bot07@codearena.dev",
+    "userId": "6a55fefe30ea3c9b0371dc33",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmZTMwZWEzYzliMDM3MWRjMzMiLCJoYW5kbGUiOiJib3QwNyIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzQsImV4cCI6MTc4NDYyNTUzNH0.AuPJeV1cq0T-zGuh6AXyXnvw8cFLcodOraeB13bvAFQ"
+  },
+  {
+    "handle": "bot08",
+    "email": "bot08@codearena.dev",
+    "userId": "6a55fefe30ea3c9b0371dc35",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmZTMwZWEzYzliMDM3MWRjMzUiLCJoYW5kbGUiOiJib3QwOCIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzQsImV4cCI6MTc4NDYyNTUzNH0.JKzhkIyEHCnq4ZanUJ3nfXBw5gkCL41PzAUAbsazMMo"
+  },
+  {
+    "handle": "bot09",
+    "email": "bot09@codearena.dev",
+    "userId": "6a55feff30ea3c9b0371dc37",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmVmZjMwZWEzYzliMDM3MWRjMzciLCJoYW5kbGUiOiJib3QwOSIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzUsImV4cCI6MTc4NDYyNTUzNX0.bqrDgdkiHVkOkBwQdyH0aPxCW9ftzgTY8QUgpUBjjrQ"
+  },
+  {
+    "handle": "bot10",
+    "email": "bot10@codearena.dev",
+    "userId": "6a55ff0030ea3c9b0371dc39",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmYwMDMwZWEzYzliMDM3MWRjMzkiLCJoYW5kbGUiOiJib3QxMCIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzYsImV4cCI6MTc4NDYyNTUzNn0.PNl1oHeiVF-YQYMe_aVB846W-VnSaUbCYWro1rQPAF0"
+  },
+  {
+    "handle": "bot11",
+    "email": "bot11@codearena.dev",
+    "userId": "6a55ff0030ea3c9b0371dc3b",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmYwMDMwZWEzYzliMDM3MWRjM2IiLCJoYW5kbGUiOiJib3QxMSIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzYsImV4cCI6MTc4NDYyNTUzNn0.OIh8N1dfnPVeY7vRDiGhA5CDp7Wnd-TCknKteI57kQk"
+  },
+  {
+    "handle": "bot12",
+    "email": "bot12@codearena.dev",
+    "userId": "6a55ff0130ea3c9b0371dc3d",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmYwMTMwZWEzYzliMDM3MWRjM2QiLCJoYW5kbGUiOiJib3QxMiIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzcsImV4cCI6MTc4NDYyNTUzN30.AY2QJrDgMD1nnCozb_LnVvt4NlGf5acVSqRgkncJfhQ"
+  },
+  {
+    "handle": "bot13",
+    "email": "bot13@codearena.dev",
+    "userId": "6a55ff0230ea3c9b0371dc3f",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmYwMjMwZWEzYzliMDM3MWRjM2YiLCJoYW5kbGUiOiJib3QxMyIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzgsImV4cCI6MTc4NDYyNTUzOH0.3QG_T4n6Iga2XQZxyIwtgZU29njy1DcsjLAnIoR8yT0"
+  },
+  {
+    "handle": "bot14",
+    "email": "bot14@codearena.dev",
+    "userId": "6a55ff0230ea3c9b0371dc41",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmYwMjMwZWEzYzliMDM3MWRjNDEiLCJoYW5kbGUiOiJib3QxNCIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzgsImV4cCI6MTc4NDYyNTUzOH0.W9S1y4SVuOYn2PX6VwRbGUxis1B0a2g7FKz0NnXXVMU"
+  },
+  {
+    "handle": "bot15",
+    "email": "bot15@codearena.dev",
+    "userId": "6a55ff0330ea3c9b0371dc43",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTU1ZmYwMzMwZWEzYzliMDM3MWRjNDMiLCJoYW5kbGUiOiJib3QxNSIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODQwMjA3MzksImV4cCI6MTc4NDYyNTUzOX0.thLIwTycOePBgVYYsf_g1iZ2ad2thEnCGDU2U9eP-RQ"
+  }
+]
