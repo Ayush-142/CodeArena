@@ -125,14 +125,14 @@ into this table, no derivation needed).
 
 | Metric | Measured |
 |---|---|
-| Sustained judge throughput (verdicts/min) | TODO (measured post-deploy) |
-| Peak queue depth (jobs) | TODO (measured post-deploy) |
-| Judge latency p95, enqueue→verdict (s) | TODO (measured post-deploy) |
-| Judge latency p50, enqueue→verdict (s) | TODO (measured post-deploy) |
-| POST /api/submissions p95 during peak (ms) | TODO (measured post-deploy) |
-| Queue drain time after load stopped (s) | TODO (measured post-deploy) |
+| Sustained judge throughput (verdicts/min) | 21.8 |
+| Peak queue depth (jobs) | 3 |
+| Judge latency p95, enqueue→verdict (s) | 10.6 |
+| Judge latency p50, enqueue→verdict (s) | 9.2 |
+| POST /api/submissions p95 during peak (ms) | 285 |
+| Queue drain time after load stopped (s) | 0.0 |
 
-API response time stayed flat (~`TODO` ms) while queue depth grew to `TODO` — the queue absorbed
+API response time stayed flat (~`164` ms) while queue depth grew to `3` — the queue absorbed
 the burst as designed (ARCHITECTURE.md §2's queue-decoupling principle); the throughput ceiling
 is judge-worker CPU, which scales horizontally on queue depth (§12).
 
