@@ -1,0 +1,39 @@
+Precompiled-header (bits/stdc++.h) compile-time benchmark — 2026-07-15
+
+Method: 5 timed compiles per (sample, mode), run via `docker exec` into throwaway containers
+from the deployed codearena-judge:12-bookworm image on the production VM (not the local dev
+machine — the claim is about deployed judging). Exact compile command used by worker/src/sandbox.ts:
+  g++ -O2 -o /tmp/a.out /tmp/main.cpp
+"no PCH" mode renamed bits/stdc++.h.gch inside that one ephemeral container only; the real judge
+image on disk was never modified. First run of each 5 discarded (filesystem cache warm-up);
+median of the remaining 4 reported.
+
+Raw per-run timings (ms):
+  short  (is-prime.ac.cpp, 22 lines, #include <bits/stdc++.h>)
+    with PCH:    229 244 378 272 237   -> median (last 4) = 258.0
+    without PCH: 1182 1070 1061 1091 1072 -> median (last 4) = 1071.0
+    reduction: 75.9%
+
+  medium (two-sum.ac.cpp logic ported to <bits/stdc++.h>, 22 lines)
+    with PCH:    311 263 275 283 280   -> median (last 4) = 277.5
+    without PCH: 1128 1091 1113 1112 1096 -> median (last 4) = 1104.0
+    reduction: 74.9%
+
+  long   (~150 lines: segment tree, BFS, DSU, custom struct, <bits/stdc++.h>)
+    with PCH:    691 659 641 651 705   -> median (last 4) = 655.0
+    without PCH: 1500 1506 1502 1468 1485 -> median (last 4) = 1493.5
+    reduction: 56.1%
+
+Average reduction across the 3 samples: 69.0% (round to 70%). Range: 56.1%-75.9%.
+
+Compile's share of total judge time (idle system, real AC submissions, wall time from
+Submission.createdAt to Submission.updatedAt — includes BullMQ pickup + compile + all
+sequential per-test containers):
+  is-prime: compile 258ms / total judge wall time 3460ms = 7.5%
+  two-sum:  compile 278ms / total judge wall time 3164ms = 8.8%
+
+Conclusion: precompiling bits/stdc++.h cuts compile time by ~70% (56-76% depending on program
+size), but compile is only ~8% of total judge latency even with the fix — most of the ~3.2s
+comes from BullMQ pickup + sequential per-test container spin-up, not compilation. Report this
+as a compile-time improvement, not a judge-latency improvement (the latter is closer to ~5-6%
+end-to-end).

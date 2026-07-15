@@ -149,6 +149,14 @@ ARCHITECTURE.md §12.
 
 Raw summary output of the run backing this table: scripts/results/load-test-2026-07-15.txt
 
+**Precompiled header.** Precompiling `<bits/stdc++.h>` into the judge image (`worker/judge/Dockerfile`)
+cuts C++ compile time by **~70%** (56–76% across a short/medium/long sample, measured with 5 timed
+runs each directly against the deployed judge container, median of the last 4 after a warm-up
+discard). Compile is only ~8% of total judge latency even with the fix — most of a typical ~3.2s
+judge wall time is BullMQ pickup and sequential per-test container spin-up, not compilation — so
+this is a compile-time win specifically, not a proportional judge-latency win. Raw benchmark
+output: scripts/results/pch-compile-benchmark-2026-07-15.txt
+
 ## Run it locally
 
 ```bash
