@@ -1,0 +1,17 @@
+=== official load test window: summary ===
+Test conditions: 15 bots × 3 max in-flight each (applied concurrency 45), 5.0-minute window, ~70% AC / 20% WA / 10% TLE mix. 140 verdicts observed.
+Metric                                          | Measured
+  (throughput measured over 440s, not the nominal 300s — judge latency exceeded the stage's own duration, so completions kept landing after submitting stopped)
+Sustained judge throughput (verdicts/min)       | 19.1
+Peak queue depth (jobs)                         | 45
+Queue depth at window end, pre-drain (jobs)     | 45
+Max global in-flight (all bots)                 | 45
+Judge latency p95, enqueue→verdict (s)          | 144.3
+Judge latency p50, enqueue→verdict (s)          | 140.7
+POST /api/submissions p95 (ms)                  | 416
+Mean POST /api/submissions latency (ms)         | 159
+POST p95, first minute of window (ms)           | 418
+POST p95, last minute of window (ms)             | 156
+Queue drain time after load stopped (s)         | 140.1
+Rate-limit (429) hits during window              | 0
+Verdicts resolved via Socket.io / poll fallback   | 139 / 11

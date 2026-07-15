@@ -118,23 +118,36 @@ every service via Docker Compose — see [DEPLOY.md](DEPLOY.md).
 
 ### Measured performance
 
-Load test: **15 bots, 3 max in-flight submissions, 5-minute sustained run** against the deployed
-B2s VM (2 vCPU / 4 GB), solution mix ~70% AC / 20% WA / 10% TLE (`simulate-contest.ts --load` —
-see DEPLOY.md's "Acceptance / load test" section; its own summary output is copy-pasted directly
-into this table, no derivation needed).
+Load test: **15 bots, 3 max in-flight submissions per bot (45 applied concurrency), 5-minute
+sustained run** against the deployed B2s VM (2 vCPU / 4 GB), solution mix ~70% AC / 20% WA / 10%
+TLE (`simulate-contest.ts --load` — see DEPLOY.md's "Acceptance / load test" section; its own
+summary output is copy-pasted directly into this table, no derivation needed).
 
 | Metric | Measured |
 |---|---|
-| Sustained judge throughput (verdicts/min) | 21.8 |
-| Peak queue depth (jobs) | 3 |
-| Judge latency p95, enqueue→verdict (s) | 10.6 |
-| Judge latency p50, enqueue→verdict (s) | 9.2 |
-| POST /api/submissions p95 during peak (ms) | 285 |
-| Queue drain time after load stopped (s) | 0.0 |
+| Sustained judge throughput (verdicts/min) | 19.1 |
+| Peak queue depth (jobs) | 45 |
+| Judge latency p95, enqueue→verdict (s) | 144.3 |
+| Judge latency p50, enqueue→verdict (s) | 140.7 |
+| POST /api/submissions p95 during peak (ms) | 416 |
+| Queue drain time after load stopped (s) | 140.1 |
 
-API response time stayed flat (~`164` ms) while queue depth grew to `3` — the queue absorbed
-the burst as designed (ARCHITECTURE.md §2's queue-decoupling principle); the throughput ceiling
-is judge-worker CPU, which scales horizontally on queue depth (§12).
+API submit latency stayed essentially flat under full saturation (mean 159 ms, p95 416 ms — close
+to the light-load baseline) — confirming POST /api/submissions really is O(1) work (write the
+Mongo doc, enqueue the job) that never blocks on queue depth, exactly as designed (ARCHITECTURE.md
+§2's queue-decoupling principle). What balloons instead is judge latency: with peak queue depth
+pinned at the 45-submission cap and a single BullMQ worker processing one job at a time
+(worker/src/index.ts), a submission arriving behind a full queue can wait over two minutes for its
+verdict (p50 140.7 s, p95 144.3 s) even though the API acknowledged it almost instantly. The
+throughput ceiling (19.1 verdicts/min here) is judge-worker CPU, which scales horizontally on
+queue depth (§12).
+
+A separate ramp test found sustained capacity of roughly ~19 verdicts/min (approximate — short
+stages, some rate-limit contention at high concurrency) — consistent with this run's own 19.1
+verdicts/min; beyond it, throughput plateaus while queue depth grows linearly — see
+ARCHITECTURE.md §12.
+
+Raw summary output of the run backing this table: scripts/results/load-test-2026-07-15.txt
 
 ## Run it locally
 

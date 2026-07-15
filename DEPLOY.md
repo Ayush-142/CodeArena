@@ -298,6 +298,11 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec \
 Cleans up its own bot accounts automatically when it finishes — no separate `--cleanup` needed
 afterward (unlike the demo-mode bots above).
 
+Load-test bots accumulate submission history against the hourly rate cap; re-runs must use a
+fresh bot pool (or wait out the window), and client pacing must clear the submission rate floor
+with ≥2s margin to absorb network-latency jitter — tighter margins produce sporadic 429s that
+contaminate latency and throughput measurements.
+
 ---
 
 ## Common operations

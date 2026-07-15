@@ -14,3 +14,5 @@ CLAUDE.md
 .github/prompts
 .claude/
 notes/
+ssh -N -i "C:\Users\BIT\Downloads\CodeArena_key.pem" -L 6379:localhost:6379 Ayush@98.70.24.7
+ssh -i C:\Users\BIT\Downloads\CodeArena_key.pem Ayush@98.70.24.7
