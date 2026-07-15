@@ -7,12 +7,18 @@
 # (see Caddyfile) — reachable only inside this network or via `curl localhost:PORT` on the VM
 # itself, never through the public domain.
 #
-# mem_limits sum to ~2.44GB (2496m: mongo 512 + redis 128 + minio 512 + api 384 + worker 512 +
-# frontend 384 + caddy 64), leaving ~1.5GB headroom under the 4GB box for judge-container bursts
+# mem_limits sum to ~2.87GB (2944m: mongo 512 + redis 128 + minio 512 + api 384 + worker 512 +
+# frontend 384 + caddy 512), leaving ~0.9GB headroom under the 4GB box for judge-container bursts
 # (the judge sandboxes worker spawns are separate, short-lived containers capped by each
 # problem's own memoryLimitMb — not counted against `worker`'s own limit here) plus the OS,
 # backed by the 2GB swapfile DEPLOY.md has you create as a safety net. minio's share went
-# 256m -> 512m after a real incident — see its own mem_limit comment below.
+# 256m -> 512m after a real incident — see its own mem_limit comment below. caddy's went
+# 64m -> 512m after a second real incident: a k6 load test at 500+ concurrent VUs (mixing page
+# and API traffic) OOM-killed caddy repeatedly — confirmed via `sudo journalctl -k` on the VM
+# (kernel oom-killer, task=caddy, 18 kills in ~6 minutes) — because 64MB can't hold the
+# TLS/HTTP-2/HTTP-3 connection state for that many concurrent clients, especially once page
+# responses (much larger HTML bodies than JSON) are in the mix. See
+# scripts/results/k6-ceiling-2026-07-15.txt for the full measurement.
 
 networks:
   codearena:
@@ -152,7 +158,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
-    mem_limit: 64m
+    mem_limit: 512m
     networks: [codearena]
     ports:
       - '80:80'

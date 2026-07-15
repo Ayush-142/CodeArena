@@ -1,0 +1,77 @@
+k6 browse-load test — read-path capacity — 2026-07-15
+
+Run from WSL (laptop), against https://codearena-ayush.duckdns.org, NEVER from the VM itself.
+Script: scripts/k6-browse.js. k6 v2.1.0 (installed from GitHub release binary, no apt/sudo).
+
+Endpoints exercised (weighted mix per VU iteration, 1-3s think time between requests):
+  GET /api/problems                                (problem list)     30%
+  GET /api/problems/:slug                            (problem detail)   30%  (4 published slugs, random)
+  GET /api/contests/:id                               (contest page)     20%  (winter-open, ended/finalized)
+  GET /api/contests/:id/leaderboard                   (leaderboard)      20%
+
+Recon (done before writing the script):
+  - Confirmed real endpoint paths against frontend/lib/api.ts.
+  - Confirmed none of these 5 read routes carry requireAuth, and the target contest (winter-open)
+    is 'ended' so even contest-page's conditional running-phase auth check never triggers — the
+    whole test runs unauthenticated, no bot tokens needed.
+  - Confirmed ZERO rate limiting on any GET route: grepped every route file's rateLimit(...)
+    usage — only auth.ts (register/login), hints.ts, run.ts, and submissions.ts carry a limiter.
+    Caddyfile has no rate-limit directive either. The test as specified was possible against the
+    real deployed config; nothing needed reporting/stopping for at STEP 0.3.
+  - Judge queue confirmed idle (BullMQ waiting=0, active=0) immediately before the run started.
+
+Profile: ramping-vus — 1m to 50, hold 2m, 1m to 100, hold 2m, 1m to 250, hold 5m, 1m ramp-down.
+Total duration: 13m01.7s. Total requests: 55,909. Total iterations: 55,909.
+
+=== TOTAL RESULT: 0% errors at every stage, at every VU level, on every endpoint ===
+
+Thresholds (k6-native, evaluated at the 250-VU hold specifically):
+  errors{stage:hold_250}: rate<0.01           -> PASS (rate=0.00%)
+  http_req_duration{stage:hold_250}: p(95)<1000ms -> PASS (p(95)=130.5ms)
+
+Per-stage aggregate (all 4 endpoints combined):
+  Stage      | Total reqs | Aggregate req/s | Errors | Error rate
+  hold_50    |      2,877 |            24.0 |      0 |     0.000%
+  hold_100   |      5,677 |            47.4 |      0 |     0.000%
+  hold_250   |     35,824 |           119.4 |      0 |     0.000%
+
+Per-stage x per-endpoint breakdown (p50/p95/p99 in ms, computed from the raw per-request time
+series — every http_req_duration data point tagged with {stage, endpoint}, bucketed and
+percentiled locally, not k6's own aggregate summary):
+
+  STAGE: hold_50 (50 VUs steady state)
+    endpoint         count   p50    p95    p99   err%  req/s
+    contest_page       565   81.3  113.6  136.3  0.00   4.71
+    leaderboard         571   79.9  111.5  131.2  0.00   4.76
+    problem_detail      835   79.6  114.3  132.1  0.00   6.96
+    problem_list        906   79.9  117.4  140.9  0.00   7.55
+
+  STAGE: hold_100 (100 VUs steady state)
+    endpoint         count   p50    p95    p99   err%  req/s
+    contest_page      1110   88.9  121.2  137.8  0.00   9.26
+    leaderboard        1176   88.0  117.3  128.6  0.00   9.81
+    problem_detail     1699   88.0  119.7  135.3  0.00  14.17
+    problem_list       1692   87.5  118.8  142.3  0.00  14.11
+
+  STAGE: hold_250 (250 VUs steady state)
+    endpoint         count   p50    p95    p99   err%  req/s
+    contest_page      7134   93.1  133.9  150.9  0.00  23.78
+    leaderboard        7131   90.5  129.7  146.7  0.00  23.77
+    problem_detail    10828   90.5  129.3  145.7  0.00  36.09
+    problem_list      10731   90.7  129.5  144.7  0.00  35.77
+
+Ramp stages (transient, included for completeness — not the steady-state numbers to quote):
+  ramp_to_50:  p50 ~82ms,  p95 ~117-125ms, 0 errors, ~2.5-3.6 req/s per endpoint
+  ramp_to_100: p50 ~85-86ms, p95 ~123-130ms, 0 errors, ~7-11 req/s per endpoint
+  ramp_to_250: p50 ~88-90ms, p95 ~124-125ms, 0 errors, ~16-25 req/s per endpoint
+  ramp_down:   p50 ~88-92ms, p95 ~125-130ms, 0 errors, ~12-18 req/s per endpoint
+
+Error classification (429 / 5xx / timeout / other) — all zero, in every one of the 28
+(stage, endpoint) buckets and across all 55,909 requests. No 429s (confirms the recon finding
+that these routes are genuinely unthrottled), no 5xx, no timeouts, no other non-2xx.
+
+Conclusion: the read path did not find a bottleneck within this test's range. Latency stayed
+essentially flat (p95 115ms -> 134ms, a ~15% increase) from 50 to 250 VUs, well under the 1s
+threshold throughout, with zero errors of any kind at every stage. 250 VUs (k6) is a floor on
+demonstrated capacity, not a measured ceiling — the actual breaking point is unknown and would
+require pushing the profile further (more VUs and/or a longer hold) to find.

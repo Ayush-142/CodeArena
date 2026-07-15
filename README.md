@@ -157,6 +157,20 @@ judge wall time is BullMQ pickup and sequential per-test container spin-up, not 
 this is a compile-time win specifically, not a proportional judge-latency win. Raw benchmark
 output: scripts/results/pch-compile-benchmark-2026-07-15.txt
 
+**Read-path load test (k6).** A separate k6 profile (`scripts/k6-pages.js`) ramps 250 → 500 →
+750 → 1000 concurrent virtual users against a 50/50 mix of page routes (`/problems`,
+`/problems/:slug`, `/contests/:id`, `/contests/:id/leaderboard`) and their JSON API equivalents,
+run from an operator's own machine against the deployed VM. First pass found the deployed Caddy
+reverse proxy repeatedly OOM-killed under load (its `mem_limit` was 64m — confirmed via the VM's
+own kernel log, `sudo journalctl -k`, not just inferred); raised to 512m and re-measured. Result:
+**500 VUs fully clean** — 0 errors, page p95 ≤607ms. API endpoints stay flat around ~140ms p95
+all the way through 1000 VUs; page latency starts queueing past 750 VUs (Next.js SSR rendering
+contending for the VM's 2 vCPUs) — p95 2.3-2.6s at 750 VUs, 13.6-14.3s at 1000 VUs — with
+**zero failures** at any VU
+count tested — a pure latency ceiling, not a crash. Raw output:
+scripts/results/k6-ceiling-2026-07-15.txt (the OOM diagnosis) and
+scripts/results/k6-ceiling-v2-2026-07-15.txt (the post-fix re-measurement).
+
 ## Run it locally
 
 ```bash

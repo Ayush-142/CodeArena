@@ -1,0 +1,153 @@
+k6 ceiling-finding load test — read path (pages + API) — 2026-07-15
+
+Run from WSL (laptop), against https://codearena-ayush.duckdns.org, NEVER from the VM.
+Script: scripts/k6-pages.js. k6 v2.1.0. ulimit -n raised to 65536 before running.
+
+IMPORTANT — page routes are NOT data-fetching SSR:
+Confirmed by reading frontend/app/{problems,contests}/**/page.tsx — all 4 target pages
+(/problems, /problems/:slug, /contests/:id, /contests/:id/leaderboard) are `'use client'`
+components. Next.js still server-renders the initial HTML shell for every request (real,
+measurable frontend-container work), but the actual data fetch happens client-side via
+useEffect, not as part of this SSR. The `class:api` 50% of traffic approximates the client-side
+fetch a real browser would additionally issue; it is not causally chained to `class:page` within
+one k6 iteration.
+
+Mix: 50% page routes / 50% API routes, weights 15/15/10/10 within each half (mirroring
+k6-browse.js's original 30/30/20/20 proportions), 1-3s think time. Target contest: winter-open
+(ended/finalized, public, no auth needed).
+
+Profile: ramping-vus — 30s to 250, hold 2m, 30s to 500, hold 2m, 30s to 750, hold 2m, 30s to
+1000, hold 2m, 30s ramp-down. Planned duration 10m30s; k6 process ran ~11 min executing plus a
+further ~17 min just flushing its ~608MB JSON output to the WSL-mounted Windows filesystem
+(slow 9P bridge, not part of the actual test — flagged so this number isn't mistaken for test
+duration). Total requests: 121,450. Total iterations: 121,440. dropped_iterations: 0.
+
+=== CORRECTION TO LIVE CONSOLE OUTPUT — READ THIS FIRST ===
+scripts/k6-pages.js has a real bug: the custom `errors`/`errors_429`/`errors_5xx`/`errors_timeout`
+Counter/Rate metrics are incremented via e.g. `errors.add(!ok)` with NO explicit tags argument.
+Custom k6 metrics do NOT automatically inherit the {stage,class,endpoint} tags passed to the
+http.get() call in the same iteration — only k6's BUILT-IN http_* metrics (http_req_duration,
+http_req_failed, http_reqs) get those automatically. Consequence: every `errors{stage:X}` submetric
+the live console printed showed a false 0.00% (all real error data landed in an untagged bucket),
+so the THRESHOLDS section's "hold_750 and hold_1000 crossed, hold_250/hold_500 passed" verdict
+UNDERSTATED where degradation actually starts. The numbers below are corrected: derived from the
+correctly-tagged built-in `http_req_failed` metric (streamed from the full JSON output, not k6's
+own aggregate summary). The p95 latency thresholds (http_req_duration{stage:X}) WERE reliable —
+those come from the same auto-tagged built-in metric.
+
+=== STAGE x CLASS SUMMARY (corrected) ===
+  Stage      | Class | Total reqs | Failed | Error rate | p95 range across 4 endpoints
+  hold_250   | api   |      7,013 |      0 |      0.00% | 126.6 - 133.2 ms
+  hold_250   | page  |      6,901 |      0 |      0.00% | 247.0 - 275.0 ms
+  hold_500   | api   |     12,618 |    113 |      0.90% | 184.8 - 211.0 ms
+  hold_500   | page  |     12,839 |    267 |      2.08% | 778.8 - 1408.6 ms
+  hold_750   | api   |     13,952 |  1,030 |      7.38% | 370.5 - 484.5 ms
+  hold_750   | page  |     14,181 |  2,016 |     14.22% | 2140.7 - 30280.3 ms
+  hold_1000  | api   |     14,691 |  1,648 |     11.22% | 483.8 - 558.0 ms
+  hold_1000  | page  |     14,729 |  2,651 |     18.00% | 30192.8 - 30301.9 ms
+
+Degradation criteria (defined before running): error rate > 0.5%, or p95 > 1.5s, at a hold stage.
+  hold_250:  CLEAN (0% errors both classes, p95 well under 1.5s)
+  hold_500:  DEGRADED by the error-rate criterion (api 0.90%, page 2.08%, both > 0.5%) even
+             though p95 latency hadn't yet crossed 1.5s for either class.
+  hold_750:  DEGRADED badly — error rate 7-14%, page p95 up to 30s.
+  hold_1000: DEGRADED worst — error rate 11-18%, page p95 pinned near 30s for every endpoint.
+
+Per-endpoint detail (p50/p95/p99 ms, request count, error % — from http_req_duration /
+http_req_failed, both auto-tagged):
+
+  hold_250
+    api/contest_page_api      n=1386  p50=93.7   p95=133.2  p99=170.9  err=0.00%
+    api/leaderboard_api       n=1468  p50=91.2   p95=126.8  p99=156.6  err=0.00%
+    api/problem_detail_api    n=2091  p50=91.2   p95=126.6  p99=144.2  err=0.00%
+    api/problem_list_api      n=2068  p50=90.0   p95=126.7  p99=152.6  err=0.00%
+    page/contest_page_page    n=1381  p50=197.4  p95=268.9  p99=322.8  err=0.00%
+    page/leaderboard_page     n=1383  p50=197.7  p95=275.0  p99=354.2  err=0.00%
+    page/problem_detail_page  n=2001  p50=197.1  p95=271.4  p99=353.1  err=0.00%
+    page/problems_list_page   n=2136  p50=184.0  p95=247.0  p99=304.9  err=0.00%
+
+  hold_500
+    api/contest_page_api      n=2516  p50=96.7   p95=211.0  p99=714.3  err=0.83%
+    api/leaderboard_api       n=2567  p50=93.7   p95=189.2  p99=740.0  err=0.90%
+    api/problem_detail_api    n=3752  p50=94.1   p95=184.8  p99=519.0  err=0.93%
+    api/problem_list_api      n=3783  p50=93.8   p95=187.9  p99=534.8  err=0.90%
+    page/contest_page_page    n=2522  p50=251.2  p95=1294.3 p99=2572.1 err=2.74%
+    page/leaderboard_page     n=2572  p50=253.0  p95=1408.6 p99=3272.9 err=2.68%
+    page/problem_detail_page  n=3870  p50=246.2  p95=1331.7 p99=2382.1 err=1.99%
+    page/problems_list_page   n=3875  p50=211.3  p95=778.8  p99=1928.4 err=1.34%
+
+  hold_750
+    api/contest_page_api      n=2711  p50=106.1  p95=484.5   p99=1200.3  err=7.93%
+    api/leaderboard_api       n=2865  p50=103.1  p95=450.0   p99=1139.2  err=7.75%
+    api/problem_detail_api    n=4075  p50=102.3  p95=370.5   p99=854.9   err=6.85%
+    api/problem_list_api      n=4301  p50=102.0  p95=395.6   p99=1015.6  err=7.30%
+    page/contest_page_page    n=2917  p50=425.5  p95=30280.3 p99=32742.6 err=16.39%
+    page/leaderboard_page     n=2866  p50=402.7  p95=3651.5  p99=32683.8 err=16.12%
+    page/problem_detail_page  n=4217  p50=399.9  p95=3029.6  p99=32695.2 err=13.71%
+    page/problems_list_page   n=4181  p50=262.5  p95=2140.7  p99=31482.4 err=11.91%
+
+  hold_1000
+    api/contest_page_api      n=2925  p50=103.2  p95=558.0   p99=60000.2 err=10.70%
+    api/leaderboard_api       n=2912  p50=99.8   p95=544.7   p99=32203.4 err=11.47%
+    api/problem_detail_api    n=4340  p50=98.6   p95=503.7   p99=60000.1 err=11.66%
+    api/problem_list_api      n=4514  p50=98.9   p95=483.8   p99=60000.1 err=10.97%
+    page/contest_page_page    n=2869  p50=372.1  p95=30296.0 p99=60000.3 err=18.37%
+    page/leaderboard_page     n=2980  p50=366.3  p95=30301.9 p99=60000.1 err=19.06%
+    page/problem_detail_page  n=4441  p50=359.3  p95=30286.6 p99=60000.3 err=18.33%
+    page/problems_list_page   n=4439  p50=244.2  p95=30192.8 p99=60000.2 err=16.72%
+
+  (p99 values near 30000ms/60000ms are hitting k6's default request timeout, not a real judge
+  latency — they mean the connection hung until k6 gave up, consistent with a proxy stuck
+  mid-crash rather than a slow-but-alive server.)
+
+=== VERDICT ===
+Last fully clean stage: 250 VUs (hold_250) — 0% errors, p95 133ms (api) / 275ms (page).
+First stage crossing the pre-defined degradation criteria: 500 VUs (hold_500) — error rate
+criterion trips for both classes (page worse: 2.08% vs api 0.90%); p95 latency criterion does
+not trip until later. Severe, sustained collapse: 750-1000 VUs.
+Pages degrade first and worse than API at every degraded stage (roughly 2x the error rate,
+far higher p95) — consistent with the root cause below (larger response bodies cost more of a
+memory-constrained proxy's budget per connection).
+
+=== ROOT CAUSE — CONFIRMED, NOT INFERRED ===
+Caddy (the single reverse-proxy entry point for ALL public traffic, both /api/* and page routes
+— see Caddyfile) was repeatedly OOM-killed by the Linux kernel's memory cgroup controller during
+the test. Confirmed via `sudo journalctl -k` on the VM directly (kernel OOM-killer log lines,
+`task=caddy`, `oom_memcg=.../docker-<caddy container id>.scope`) — this is authoritative, not
+circumstantial. 18 total kills, first at 10:11:18 UTC (inside hold_500, ~64s before that stage
+ended) through 10:17:07 UTC (during hold_1000), roughly one kill every 15-30 seconds once it
+started. `docker inspect codearena-caddy-1` confirmed RestartCount=18, matching exactly.
+docker-compose.prod.yml sets `caddy: mem_limit: 64m` — far too small once concurrent-connection
+count (and the larger buffers page-route HTML responses need vs. small JSON) exceeds what 64MB
+of TLS/HTTP-2/HTTP-3 connection state can hold. `restart: unless-stopped` masked this as
+transient connection resets/timeouts rather than a visible crash.
+
+This is a genuine finding about the deployed production config, not an artifact of this load
+test alone — a real traffic spike anywhere near this concurrency would hit the same wall.
+
+=== CLIENT-SIDE VALIDITY — RULED OUT ===
+  - WSL load average never exceeded ~3.0 on a 12-core machine (~25% utilization) at any point,
+    including during hold_1000.
+  - Free memory stayed above 1.6GB of 3.5GB total throughout (used climbed from ~500MB baseline
+    to ~1.2GB at peak, never pressured).
+  - k6's own dropped_iterations metric: 0 for the entire run (the VU scheduler never fell behind).
+  - Average data_received: 789MB / ~11min ≈ 9.6 Mbps sustained — far below any plausible home
+    connection's ceiling, even accounting for hold_1000 being the busiest sub-period.
+  - Established TCP connection count tracked the VU target cleanly through hold_250/hold_500,
+    then began OSCILLATING during hold_750/hold_1000 (e.g. 407-751 during a stage targeting 750
+    steady connections) instead of holding steady — consistent with the server side actively
+    dropping and re-accepting connections (Caddy crash-looping), not the client failing to
+    open them.
+  None of this points at the laptop or home network. The ceiling measured here is real and
+  server-side.
+
+=== ERROR TYPE BREAKDOWN ===
+Status-code distribution per stage (all classes/endpoints combined), from http_req_failed's
+auto-tagged `status` field:
+  hold_250:  {"200": 13914}                            — 100% success
+  hold_500:  {"0": 380, "200": 25077}                   — 1.5% network-level failures
+  hold_750:  {"0": 3046, "200": 25087}                  — 10.8% network-level failures
+  hold_1000: {"0": 4299, "200": 25121}                  — 14.6% network-level failures
+"status":"0" = no HTTP response ever received (connection reset / timeout / EOF — all consistent
+with talking to a Caddy process mid-OOM-kill-restart). Zero 429s, zero application-level 5xx —
+this is not the API or worker misbehaving, it is the proxy in front of them dying.

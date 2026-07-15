@@ -1,0 +1,127 @@
+k6 ceiling re-measurement — AFTER fixing caddy's OOM crash-loop — 2026-07-15
+
+Fix applied before this run: docker-compose.prod.yml's caddy mem_limit raised 64m -> 512m
+(verified headroom first: VM has 3.8GB total / 2.2GB available per `free -h`; worst-case total
+of all mem_limits goes from 2.44GB to 2.87GB, leaving ~0.9GB for OS/judge-container bursts).
+Propagated to the VM (scp docker-compose.prod.yml, then
+`docker compose -f docker-compose.prod.yml --env-file .env.production up -d caddy`) and applied.
+
+CAVEAT: that `up -d caddy` command also recreated minio/redis/mongo (not just caddy) — almost
+certainly because the whole file was copied over (not patched in place) and its line endings
+changed in the process, so Compose recomputed config hashes for every service. Verified no harm:
+all containers came back `healthy`, named volumes (mongo-data, minio-data) were untouched by the
+recreation so no data was lost (confirmed: GET /api/contests still returned all 6 contests
+afterward). Still, this was a wider blast radius than intended — flagging it plainly. It also
+broke the pre-existing SSH tunnel to the VM's redis (the tunnel's underlying connection dropped
+when the redis container itself was recreated) — that tunnel will need to be re-established for
+any future judge-queue work; not something I can do myself.
+
+Also fixed for this run: scripts/k6-pages.js's custom-metric tagging bug (see
+k6-ceiling-2026-07-15.txt's correction section) — this run's live console `errors{stage:X}`
+thresholds are now trustworthy on their own; cross-checked against the raw JSON's auto-tagged
+http_req_failed metric and they agree exactly.
+
+Same profile as before: 30s to 250, hold 2m, 30s to 500, hold 2m, 30s to 750, hold 2m, 30s to
+1000, hold 2m, 30s ramp-down. Same winter-open contest, same 50/50 page/API mix. JSON output
+written to WSL's native filesystem this time (not the /mnt/c/ Windows bridge) — completed in
+~11 minutes total with no post-test flush delay (confirms the earlier ~28-minute total was
+entirely an artifact of writing many small records across the slow 9P bridge, not the test itself).
+
+Total requests: 144,650. Total iterations: 144,650.
+
+=== HEADLINE: ERRORS ARE ESSENTIALLY GONE ===
+1 failed request out of 144,650 (0.0007%) — a single transient network blip during the ramp to
+750 VUs, immediately self-resolved. Zero 429s, zero 5xx, zero OOM kills, zero container restarts
+(confirmed via `docker inspect`: RestartCount=0, OOMKilled=false for both caddy and frontend,
+vs. 18 OOM kills for caddy in the previous run). The crash-loop is fixed.
+
+=== BUT: PAGE latency still degrades badly at scale — API does not ===
+  Stage      | Class | n      | p95 range (4 endpoints) | Error rate
+  hold_250   | api   |  7,000 | 119.2 - 124.8 ms         | 0.00%
+  hold_250   | page  |  7,061 | 230.2 - 257.3 ms         | 0.00%
+  hold_500   | api   | 13,867 | 128.2 - 134.2 ms         | 0.00%
+  hold_500   | page  | 13,695 | 325.5 - 607.2 ms         | 0.00%
+  hold_750   | api   | 18,098 | 150.2 - 161.8 ms         | 0.00%
+  hold_750   | page  | 18,330 | 2276.5 - 2647.4 ms       | 0.00%
+  hold_1000  | api   | 17,958 | 132.3 - 141.3 ms         | 0.00%
+  hold_1000  | page  | 17,898 | 13611.7 - 14320.6 ms     | 0.00%
+
+The API class is essentially flat from 250 to 1000 VUs (119ms -> 141ms p95, a ~19% increase).
+The page class grows from ~250ms (250 VUs) to ~14.3 SECONDS (1000 VUs) p95 — a >50x increase —
+while never producing a single error. Requests queue and eventually succeed; nothing crashes.
+
+Per-endpoint detail (p50/p95/p99 ms, all hold stages, err% — all 0.00% except the one blip
+during a ramp stage, not shown here):
+
+  hold_250
+    api/contest_page_api      n=1381  p50=89.2   p95=124.8  p99=163.6
+    api/leaderboard_api       n=1392  p50=86.7   p95=119.2  p99=160.8
+    api/problem_detail_api    n=2165  p50=86.1   p95=120.7  p99=153.1
+    api/problem_list_api      n=2060  p50=86.6   p95=120.9  p99=149.1
+    page/contest_page_page    n=1369  p50=183.8  p95=244.9  p99=298.3
+    page/leaderboard_page     n=1403  p50=184.0  p95=257.3  p99=302.8
+    page/problem_detail_page  n=2156  p50=184.1  p95=249.6  p99=295.5
+    page/problems_list_page   n=2133  p50=173.5  p95=230.2  p99=293.1
+
+  hold_500
+    api/contest_page_api      n=2813  p50=94.5   p95=134.2  p99=188.1
+    api/leaderboard_api       n=2782  p50=91.4   p95=128.2  p99=161.2
+    api/problem_detail_api    n=4172  p50=91.8   p95=129.7  p99=169.3
+    api/problem_list_api      n=4099  p50=91.8   p95=131.0  p99=164.6
+    page/contest_page_page    n=2767  p50=225.9  p95=595.1  p99=869.1
+    page/leaderboard_page     n=2689  p50=227.4  p95=607.2  p99=857.2
+    page/problem_detail_page  n=4193  p50=226.3  p95=572.7  p99=841.0
+    page/problems_list_page   n=4045  p50=203.7  p95=325.5  p99=690.7
+
+  hold_750
+    api/contest_page_api      n=3718  p50=101.4  p95=161.8   p99=220.9
+    api/leaderboard_api       n=3506  p50=96.9   p95=151.0   p99=200.5
+    api/problem_detail_api    n=5511  p50=97.4   p95=152.9   p99=199.3
+    api/problem_list_api      n=5363  p50=96.3   p95=150.2   p99=201.9
+    page/contest_page_page    n=3618  p50=713.8  p95=2579.2  p99=3555.3
+    page/leaderboard_page     n=3612  p50=719.1  p95=2647.4  p99=3666.0
+    page/problem_detail_page  n=5545  p50=733.9  p95=2630.8  p99=3714.1
+    page/problems_list_page   n=5554  p50=289.2  p95=2276.5  p99=3178.7
+
+  hold_1000
+    api/contest_page_api      n=3596  p50=92.2   p95=141.3    p99=211.4
+    api/leaderboard_api       n=3545  p50=89.8   p95=137.2    p99=213.9
+    api/problem_detail_api    n=5423  p50=89.8   p95=134.8    p99=193.4
+    api/problem_list_api      n=5394  p50=89.8   p95=132.3    p99=202.0
+    page/contest_page_page    n=3613  p50=931.1  p95=14075.2  p99=16614.1
+    page/leaderboard_page     n=3599  p50=946.8  p95=14261.5  p99=16921.7
+    page/problem_detail_page  n=5364  p50=934.4  p95=14320.6  p99=17111.0
+    page/problems_list_page   n=5322  p50=301.9  p95=13611.7  p99=15778.1
+
+=== VERDICT ===
+Last stage clean by BOTH classes and BOTH criteria (error>0.5% or p95>1.5s): 500 VUs
+(hold_500) — up from 250 VUs before the fix.
+API class: never degrades, at any tested VU count up to 1000. Clean throughout.
+Page class: crosses the p95>1.5s criterion at 750 VUs (p95 2.3-2.6s) and is severely degraded
+by 1000 VUs (p95 13.6-14.3s). Zero errors at either stage — this is a pure latency/queueing
+bottleneck, not a crash.
+
+=== ATTRIBUTION ===
+Confirmed NOT a crash: `docker inspect` shows RestartCount=0, OOMKilled=false for both caddy
+and frontend after this run (vs. 18 OOM kills for caddy before the fix). Confirmed NOT
+client-side (same monitoring approach as the first ceiling test — see
+k6-ceiling-2026-07-15.txt's methodology; this run's data volume and duration were both lower
+than the run that already ruled out client saturation).
+
+Most likely resource: frontend container CPU, contending for the VM's only 2 vCPUs (confirmed:
+`nproc`=2 on the VM, and frontend has no CPU limit set — NanoCpus=0, CpuQuota=0 — so it competes
+for the shared pool rather than being artificially capped). This fits the evidence precisely:
+page routes cost real CPU (Next.js server-renders the initial HTML shell for every request, even
+for the 'use client' components these all are — see k6-ceiling-2026-07-15.txt's note on this),
+while API routes return small JSON from cheap Mongo lean() queries. Under sustained concurrent
+page-route load, that CPU-bound rendering work queues up on a 2-core box exactly the way a
+CPU-saturated (not memory-saturated, not crashed) service does: growing latency, no errors,
+everything still eventually completes. I did not have a live docker-stats CPU% reading during
+this specific run to confirm directly (I don't have that from you for this run — the previous
+report asked you to watch it, but the request was answered before that observation came back);
+if you captured CPU% during this run, that would be the direct confirmation this attribution is
+built on circumstantial-but-strong structural evidence rather than a live measurement.
+
+Not yet tested: whether giving frontend a CPU floor/limit, running more Next.js instances, or
+addressing the underlying 2-vCPU ceiling would move this further. That's a natural next
+experiment, not done here per your "nothing in the README until we see the numbers" instruction.
