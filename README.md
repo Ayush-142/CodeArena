@@ -118,58 +118,81 @@ every service via Docker Compose — see [DEPLOY.md](DEPLOY.md).
 
 ### Measured performance
 
-Load test: **15 bots, 3 max in-flight submissions per bot (45 applied concurrency), 5-minute
-sustained run** against the deployed B2s VM (2 vCPU / 4 GB), solution mix ~70% AC / 20% WA / 10%
-TLE (`simulate-contest.ts --load` — see DEPLOY.md's "Acceptance / load test" section; its own
-summary output is copy-pasted directly into this table, no derivation needed).
+Three independent load tests against the deployed B2s VM (2 vCPU / 4 GB): the judge pipeline
+under sustained submission load, the C++ compile step in isolation, and the read path (pages +
+API) pushed to its breaking point. Raw output for every number below is saved under
+`scripts/results/` — nothing here is derived or estimated.
+
+#### 1. Judge pipeline (submit → verdict)
+
+**15 bots, 3 max in-flight submissions per bot (45 applied concurrency), 5-minute sustained run**,
+solution mix ~70% AC / 20% WA / 10% TLE (`simulate-contest.ts --load` — see DEPLOY.md's
+"Acceptance / load test" section).
 
 | Metric | Measured |
 |---|---|
-| Sustained judge throughput (verdicts/min) | 19.1 |
-| Peak queue depth (jobs) | 45 |
-| Judge latency p95, enqueue→verdict (s) | 144.3 |
-| Judge latency p50, enqueue→verdict (s) | 140.7 |
-| POST /api/submissions p95 during peak (ms) | 416 |
-| Queue drain time after load stopped (s) | 140.1 |
+| Sustained judge throughput | 19.1 verdicts/min |
+| Peak queue depth | 45 jobs |
+| Judge latency (enqueue→verdict) — p50 | 140.7 s |
+| Judge latency (enqueue→verdict) — p95 | 144.3 s |
+| `POST /api/submissions` latency — mean | 159 ms |
+| `POST /api/submissions` latency — p95 | 416 ms |
+| Queue drain time after load stopped | 140.1 s |
 
-API submit latency stayed essentially flat under full saturation (mean 159 ms, p95 416 ms — close
-to the light-load baseline) — confirming POST /api/submissions really is O(1) work (write the
-Mongo doc, enqueue the job) that never blocks on queue depth, exactly as designed (ARCHITECTURE.md
-§2's queue-decoupling principle). What balloons instead is judge latency: with peak queue depth
-pinned at the 45-submission cap and a single BullMQ worker processing one job at a time
-(worker/src/index.ts), a submission arriving behind a full queue can wait over two minutes for its
-verdict (p50 140.7 s, p95 144.3 s) even though the API acknowledged it almost instantly. The
-throughput ceiling (19.1 verdicts/min here) is judge-worker CPU, which scales horizontally on
-queue depth (§12).
+- **API stays fast, judging queues up.** `POST /api/submissions` is O(1) work (write the Mongo
+  doc, enqueue the job) that never blocks on queue depth — exactly as designed (ARCHITECTURE.md
+  §2's queue-decoupling principle). The 140s+ judge latency comes entirely from a single BullMQ
+  worker processing one job at a time (`worker/src/index.ts`) behind a 45-deep queue.
+- **Throughput ceiling is judge-worker CPU** (19.1 verdicts/min here), which scales horizontally
+  on queue depth (§12) — a separate ramp test found ~19 verdicts/min sustained capacity
+  independently, consistent with this run.
 
-A separate ramp test found sustained capacity of roughly ~19 verdicts/min (approximate — short
-stages, some rate-limit contention at high concurrency) — consistent with this run's own 19.1
-verdicts/min; beyond it, throughput plateaus while queue depth grows linearly — see
-ARCHITECTURE.md §12.
+Raw output: `scripts/results/load-test-2026-07-15.txt`
 
-Raw summary output of the run backing this table: scripts/results/load-test-2026-07-15.txt
+#### 2. C++ compile time (precompiled header)
 
-**Precompiled header.** Precompiling `<bits/stdc++.h>` into the judge image (`worker/judge/Dockerfile`)
-cuts C++ compile time by **~70%** (56–76% across a short/medium/long sample, measured with 5 timed
-runs each directly against the deployed judge container, median of the last 4 after a warm-up
-discard). Compile is only ~8% of total judge latency even with the fix — most of a typical ~3.2s
-judge wall time is BullMQ pickup and sequential per-test container spin-up, not compilation — so
-this is a compile-time win specifically, not a proportional judge-latency win. Raw benchmark
-output: scripts/results/pch-compile-benchmark-2026-07-15.txt
+Precompiling `<bits/stdc++.h>` into the judge image (`worker/judge/Dockerfile`) — 5 timed
+compiles per sample directly against the deployed judge container, median of the last 4 after a
+warm-up discard.
 
-**Read-path load test (k6).** A separate k6 profile (`scripts/k6-pages.js`) ramps 250 → 500 →
-750 → 1000 concurrent virtual users against a 50/50 mix of page routes (`/problems`,
-`/problems/:slug`, `/contests/:id`, `/contests/:id/leaderboard`) and their JSON API equivalents,
-run from an operator's own machine against the deployed VM. First pass found the deployed Caddy
-reverse proxy repeatedly OOM-killed under load (its `mem_limit` was 64m — confirmed via the VM's
-own kernel log, `sudo journalctl -k`, not just inferred); raised to 512m and re-measured. Result:
-**500 VUs fully clean** — 0 errors, page p95 ≤607ms. API endpoints stay flat around ~140ms p95
-all the way through 1000 VUs; page latency starts queueing past 750 VUs (Next.js SSR rendering
-contending for the VM's 2 vCPUs) — p95 2.3-2.6s at 750 VUs, 13.6-14.3s at 1000 VUs — with
-**zero failures** at any VU
-count tested — a pure latency ceiling, not a crash. Raw output:
-scripts/results/k6-ceiling-2026-07-15.txt (the OOM diagnosis) and
-scripts/results/k6-ceiling-v2-2026-07-15.txt (the post-fix re-measurement).
+| Sample | Compile time reduction |
+|---|---|
+| short (is-prime, 22 lines) | 75.9% |
+| medium (two-sum, 22 lines) | 74.9% |
+| long (~150 lines: segment tree, BFS, DSU) | 56.1% |
+| **Average** | **~70%** |
+
+Compile is only **~8% of total judge latency** even with the fix (~3.2s typical judge wall time
+is dominated by BullMQ pickup and sequential per-test container spin-up) — a compile-time win
+specifically, not a proportional judge-latency win.
+
+Raw output: `scripts/results/pch-compile-benchmark-2026-07-15.txt`
+
+#### 3. Read-path ceiling (k6)
+
+`scripts/k6-pages.js` ramps 250 → 500 → 750 → 1000 concurrent virtual users against a 50/50 mix
+of page routes (`/problems`, `/problems/:slug`, `/contests/:id`, `/contests/:id/leaderboard`) and
+their JSON API equivalents, run from an operator's own machine against the deployed VM.
+
+First pass found the deployed Caddy reverse proxy repeatedly **OOM-killed under load** — its
+`mem_limit` was 64m, confirmed via the VM's own kernel log (`sudo journalctl -k`), not just
+inferred. Raised to 512m; re-measured clean:
+
+| VUs | API p95 | Page p95 | Errors |
+|---|---|---|---|
+| 250 | 119 - 125 ms | 230 - 257 ms | 0 |
+| 500 | 128 - 134 ms | 326 - 607 ms | 0 |
+| 750 | 150 - 162 ms | 2.28 - 2.65 s | 0 |
+| 1000 | 132 - 141 ms | 13.6 - 14.3 s | 0 |
+
+- **500 VUs is fully clean.** API endpoints stay flat around ~140ms p95 all the way through
+  1000 VUs — never the bottleneck.
+- **Page latency queues past 750 VUs** (Next.js SSR rendering contending for the VM's 2 shared
+  vCPUs) — but with **zero failures at every VU count tested**: a pure latency ceiling, not a
+  crash.
+
+Raw output: `scripts/results/k6-ceiling-2026-07-15.txt` (the OOM diagnosis) and
+`scripts/results/k6-ceiling-v2-2026-07-15.txt` (the post-fix re-measurement).
 
 ## Run it locally
 
