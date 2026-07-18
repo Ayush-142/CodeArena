@@ -20,6 +20,14 @@ COPY frontend ./frontend
 # that calls the wrong API host; there is no runtime fallback for this one.
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Found missing during Nakalchi's Phase 7 production-hardening pass: without this ARG/ENV pair,
+# frontend/app/admin/contests/[id]/page.tsx's `NEXT_PUBLIC_NAKALCHI_WEB_URL` read is always
+# undefined in the built image regardless of what any .env.production file contains — same
+# build-time-only inlining as NEXT_PUBLIC_API_URL above, and the same silent-wrong-value risk if
+# omitted (here, the "View full report in Nakalchi" link just doesn't render — see that page's
+# own fallback text — rather than pointing at the wrong host).
+ARG NEXT_PUBLIC_NAKALCHI_WEB_URL
+ENV NEXT_PUBLIC_NAKALCHI_WEB_URL=${NEXT_PUBLIC_NAKALCHI_WEB_URL}
 RUN npm run build --workspace frontend
 
 FROM node:22-alpine AS runner

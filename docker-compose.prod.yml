@@ -151,6 +151,13 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        # Found missing during Nakalchi's Phase 7 pass - without this, the "View full report in
+        # Nakalchi" deep-link is unreachable in production no matter what any .env.production
+        # file contains (see frontend/Dockerfile's comment). Public domain here (unlike
+        # NAKALCHI_API_BASE_URL in api/.env.production, which now uses internal container DNS) -
+        # this one is rendered as a link in the admin's own browser, not service-to-service
+        # traffic, so it has to be reachable from outside the Docker network.
+        NEXT_PUBLIC_NAKALCHI_WEB_URL: ${NEXT_PUBLIC_NAKALCHI_WEB_URL}
     restart: unless-stopped
     mem_limit: 384m
     networks: [codearena]
