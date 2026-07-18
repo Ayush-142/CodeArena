@@ -5,6 +5,13 @@ import { describe, it, expect, vi } from 'vitest';
 // (all pure, no I/O) doesn't require live infra or a populated .env. This is what keeps this
 // suite runnable in CI with zero services.
 vi.mock('../redis/client.js', () => ({ redisClient: {} }));
+// Phase 6: rebuild.ts now also imports config/env.ts (throws on missing JWT_SECRET/
+// GEMINI_API_KEY/etc. as a module-load side effect — same class of problem the mock
+// above already exists to avoid) and queue.ts (constructs real ioredis-backed BullMQ
+// Queue instances, which would otherwise start background reconnect attempts against
+// a Redis this suite never starts). Both mocked for the same "no live infra" reason.
+vi.mock('../config/env.js', () => ({ env: { integrityAnalysisEnabled: false } }));
+vi.mock('../queue.js', () => ({ integrityQueue: { add: vi.fn() } }));
 
 const { scoreGroup, packScore, unpackScore } = await import('./rebuild.js');
 

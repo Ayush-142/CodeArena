@@ -32,6 +32,26 @@ async function assertProblemsUsable(problemIds: string[]): Promise<void> {
   }
 }
 
+// Phase 6: added for the new contest admin UI's Integrity section (frontend/app/admin/
+// contests/[id]/page.tsx) to read contest.integrityAnalysis - no other consumer needed a
+// single-contest admin GET before this.
+adminContestsRouter.get(
+  '/:id',
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'invalid id');
+    }
+    const contest = await Contest.findById(id);
+    if (!contest) {
+      throw new AppError(404, 'NOT_FOUND', 'contest not found');
+    }
+    res.json(contest);
+  }),
+);
+
 adminContestsRouter.post(
   '/',
   requireAuth,

@@ -3,6 +3,9 @@ import { Submission } from '../models/Submission.js';
 import { Problem } from '../models/Problem.js';
 import { User } from '../models/User.js';
 import { redisClient } from '../redis/client.js';
+import { integrityQueue } from '../queue.js';
+import { env } from '../config/env.js';
+import { logger } from '../logger.js';
 
 // Must match worker/src/scoring.ts's MULTIPLIER exactly — duplicated rather than
 // shared, following this codebase's established API/worker model-duplication
@@ -262,6 +265,21 @@ export async function tryFinalizeContest(contestId: string): Promise<boolean> {
     { $set: { finalStandings, isFinalized: true } },
   );
   if (!won) return true; // someone else already finalized it
+
+  // Phase 6 (Nakalchi integration): fire-and-forget, gated behind
+  // env.integrityAnalysisEnabled. This runs inline inside the leaderboard GET
+  // request that triggered finalization (see routes/contests.ts) — it must
+  // never throw upward or block, same posture as contest scoring's own
+  // "must never fail the job" comment in worker/src/index.ts. Only reachable
+  // on the single request that actually won the atomic guard above, so this
+  // fires at most once per contest, not once per concurrent racer.
+  if (env.integrityAnalysisEnabled) {
+    try {
+      await integrityQueue.add('analyze', { contestId }, { jobId: contestId });
+    } catch (err) {
+      logger.error({ contestId, err }, 'failed to enqueue integrity:analyze');
+    }
+  }
 
   await Problem.updateMany({ _id: { $in: contest.problemIds } }, { $set: { isPublished: true } });
   await redisClient.expire(`lb:${contestId}`, 86400); // kept briefly for continuity, not authoritative

@@ -1,4 +1,5 @@
 import type {
+  AdminContestDetail,
   ApiErrorBody,
   AuthUser,
   ContestDetailResponse,
@@ -181,6 +182,11 @@ export function getContest(id: string): Promise<ContestDetailResponse> {
 
 export function registerForContest(id: string): Promise<RegisterContestResponse> {
   return apiFetch<RegisterContestResponse>(`/api/contests/${id}/register`, { method: 'POST' });
+}
+
+// Phase 6: contest admin UI's Integrity section (app/admin/contests/[id]/page.tsx).
+export function getAdminContest(id: string): Promise<AdminContestDetail> {
+  return apiFetch<AdminContestDetail>(`/api/admin/contests/${id}`);
 }
 
 export function getContestLeaderboard(id: string, offset = 0, limit = 50): Promise<LeaderboardResponse> {

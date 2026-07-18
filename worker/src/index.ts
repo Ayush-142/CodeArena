@@ -27,6 +27,13 @@ interface RunJobData {
 
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
 
+// Phase 6: dynamic import (not a static one alongside the imports above) so
+// its module-level `new Worker(...)` call - which immediately starts
+// consuming the `integrity` queue - only runs after mongoose has connected,
+// matching the execution order the submissions/runs workers below get for
+// free by being defined textually after the same await.
+await import('./integrity.js');
+
 const worker = new Worker<SubmissionJobData>(
   'submissions',
   async (job) => {

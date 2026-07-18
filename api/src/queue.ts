@@ -35,3 +35,24 @@ export const runsQueue = new Queue<RunJobData>('runs', {
   connection,
   prefix: 'queue',
 });
+
+export interface IntegrityJobData {
+  contestId: string;
+}
+
+// Phase 6 (Nakalchi integration): "the enqueue is fire-and-forget with its own
+// retry" (ARCHITECTURE.md §5 Phase 6 item 3). Verified against the actually-
+// installed bullmq package (node_modules/bullmq/dist/esm/classes/job.js's
+// shouldRetryJob: `this.attemptsMade + 1 < this.opts.attempts` — `1 < undefined`
+// is false, so BullMQ does NOT retry by default) — attempts/backoff must be
+// explicit here or there is no retry at all. 5s base matches Nakalchi's own
+// JOB_BACKOFF_BASE_MS (packages/service/src/queue/queues.ts) — same kind of
+// workload (an HTTP call to a service that might be transiently down).
+export const integrityQueue = new Queue<IntegrityJobData>('integrity', {
+  connection,
+  prefix: 'queue',
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+  },
+});

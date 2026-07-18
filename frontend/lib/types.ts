@@ -239,6 +239,30 @@ export interface RunClientEvent {
   runId: string;
 }
 
+// Phase 6 (Nakalchi integration). Mirrors api/src/models/Contest.ts's
+// integrityAnalysisSchema exactly.
+export interface AdminContestIntegrityAnalysis {
+  analysisId: string;
+  status: 'pending' | 'completed' | 'failed';
+  flaggedPairs?: number;
+  topSimilarity?: number;
+  error?: string;
+  updatedAt?: string;
+}
+
+// api/src/routes/adminContests.ts GET /:id — full raw doc (same "full raw doc"
+// precedent as SubmissionDetail above)
+export interface AdminContestDetail {
+  _id: string;
+  title: string;
+  slug: string;
+  startAt: string;
+  endAt: string;
+  problemIds: string[];
+  isFinalized: boolean;
+  integrityAnalysis?: AdminContestIntegrityAnalysis;
+}
+
 // api/src/routes/hints.ts POST / — a discriminated union: the degraded path (LLM
 // timeout/outage, global quota exhausted) is a 200, not an error, per the "never a
 // 5xx, judging path unaffected" design.

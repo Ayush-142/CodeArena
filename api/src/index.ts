@@ -18,6 +18,8 @@ import { contestsRouter } from './routes/contests.js';
 import { adminContestsRouter } from './routes/adminContests.js';
 import { hintsRouter } from './routes/hints.js';
 import { metricsRouter } from './routes/metrics.js';
+import { internalContestsRouter } from './routes/internalContests.js';
+import { internalWebhooksRouter } from './routes/internalWebhooks.js';
 import { initSocket } from './socket/index.js';
 import { getWorkerHeartbeat } from './metrics.js';
 import { logger } from './logger.js';
@@ -80,7 +82,15 @@ await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codea
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: env.corsOrigins, credentials: true }));
-app.use(express.json());
+// Phase 6: `verify` captures the raw request body onto req.rawBody for
+// internalWebhooks.ts's HMAC check. Applied globally (not a second,
+// route-scoped parser) because this middleware already runs before every
+// router below - a locally-mounted parser on just the webhook route would
+// never see raw bytes, since Express executes middleware in registration
+// order and this one drains the body stream first regardless. Minor
+// per-request memory overhead (one extra Buffer reference, discarded after
+// the request); every other route ignores req.rawBody entirely.
+app.use(express.json({ verify: (req, _res, buf) => { (req as express.Request & { rawBody?: Buffer }).rawBody = buf; } }));
 app.use(cookieParser());
 app.use(attachUser); // after cookie-parser (needs req.cookies), before all routers
 
@@ -92,6 +102,11 @@ app.use('/api/contests', contestsRouter);
 app.use('/api/admin/contests', adminContestsRouter);
 app.use('/api/hints', hintsRouter);
 app.use('/metrics', metricsRouter);
+// Phase 6: mounted outside /api, mirroring Nakalchi's own /healthz sitting
+// outside /api/v1 - signals "not public API surface" for both the
+// service-token-protected submissions fetch and the signed webhook receiver.
+app.use('/internal', internalContestsRouter);
+app.use('/internal', internalWebhooksRouter);
 
 // Dev-only static test client (api/public/socket-test.html) — never served in production.
 // Placed before the 404 catch-all below so requests for it don't fall through to it.
