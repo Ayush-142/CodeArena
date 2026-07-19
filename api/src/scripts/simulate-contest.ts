@@ -341,7 +341,15 @@ async function cleanup(): Promise<void> {
   await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/codearena');
   // Matches both contest-mode bots ("bot0001") and --load's own bots ("load0001") — one
   // cleanup call removes everything this script has ever created.
-  const bots = await User.find({ handle: { $regex: `^(${BOT_HANDLE_PREFIX}|${LOAD_HANDLE_PREFIX})` } })
+  //
+  // Anchored + exact 4-digit format (matches botHandle()'s zero-padding above) - NOT a bare
+  // prefix match. Found via a live-DB audit (BUGLOG.md, 2026-07-19): the previous unanchored
+  // `^(bot|load)` regex matched 60 pre-existing "bot01".."bot60" accounts (2-digit, no leading
+  // zeros - left over from before this script's current zero-padding convention), which
+  // `--cleanup` would have deleted along with their submissions. Staged here for review, not
+  // committed automatically - re-verify against the live DB's actual handle set before trusting
+  // this in production again.
+  const bots = await User.find({ handle: { $regex: `^(${BOT_HANDLE_PREFIX}|${LOAD_HANDLE_PREFIX})\\d{4}$` } })
     .select('_id handle')
     .lean();
   const botIds = bots.map((b) => b._id);
