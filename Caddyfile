@@ -22,3 +22,16 @@
 		reverse_proxy frontend:3000
 	}
 }
+
+# Nakalchi (plagiarism detection service) - added Phase 7. Domain hardcoded
+# (not a new {$VAR}) - a running Caddy container can't gain a new env var
+# without recreation, which would drop CodeArena's own site; the domain
+# isn't a secret and never changes without also editing this file.
+nakalchi-ayush.duckdns.org {
+	handle /api/* {
+		reverse_proxy nakalchi-api:3000
+	}
+	handle {
+		reverse_proxy nakalchi-web:3000
+	}
+}

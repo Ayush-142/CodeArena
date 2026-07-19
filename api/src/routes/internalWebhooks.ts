@@ -38,7 +38,12 @@ function verifySignature(rawBody: Buffer | undefined, signature: string | undefi
  * notify.ts retries on ANY non-2xx response, not just 5xx (verified against
  * its source - `if (response.ok) {...return;}` is the only success branch,
  * everything else falls through to the retry loop, up to 3 attempts with
- * 2s/4s/8s backoff). Returning 404 here lets that retry close the race
+ * 2s/4s backoff between them - re-verified during Nakalchi's own Phase 7
+ * pass against notify.ts's actual `BACKOFF_BASE_MS * 2 ** (attempt - 1)`,
+ * only applied `if (attempt < MAX_ATTEMPTS)`: two delays between three
+ * attempts (2s after #1, 4s after #2), not three delays - this comment
+ * previously said "2s/4s/8s", which overstated it by one non-existent
+ * backoff. Returning 404 here lets that retry close the race
  * where the webhook arrives before worker/src/integrity.ts's own
  * `contest.integrityAnalysis` write completes - which small, fast fixture-
  * corpus analyses can trigger. If integrity.ts never writes at all (e.g. it
